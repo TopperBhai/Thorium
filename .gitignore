@@ -1,0 +1,38 @@
+# Gradle
+.gradle/
+**/build/
+build/
+bin/
+out/
+
+# Fabric Loom & Stonecutter
+**/.loom/
+.loom/
+**/.fabric/
+.fabric/
+**/run/
+run/
+logs/
+*.log
+
+# Reference Decompiles
+/net/
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+.externalToolBuilders/
+
+# Jars & Archives
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+*.zip
+*.tar.gz
+
+# OS specific
+.DS_Store
+Thumbs.db

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "id": "${id}",
+  "version": "${version}",
+  "name": "${name}",
+  "description": "${description}",
+  "authors": [
+    "${author}"
+  ],
+  "contact": {},
+  "license": "${license}",
+  "icon": "assets/thorium/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "preLaunch": [
+      "dev.hyperionfps.HyperionPrelaunch"
+    ],
+    "client": [
+      "dev.hyperionfps.HyperionFPS"
+    ]
+  },
+  "mixins": [
+    {
+      "config": "thorium.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "fabric-api": "*",
+    "minecraft": "*",
+    "java": ">=21"
+  }
+}

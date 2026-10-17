@@ -1,0 +1,17 @@
+{
+  "required": false,
+  "minVersion": "0.8.5",
+  "package": "dev.hyperionfps.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "plugin": "dev.hyperionfps.mixin.HyperionMixinPlugin",
+  "injectors": {
+    "defaultRequire": 0
+  },
+  "client": [
+    "core.MinecraftThreadCaptureMixin",
+    "core.TelemetrySuppressorMixin",
+    "core.MinecraftFramerateUncapperMixin",
+    "core.ParticleEngineMixin",
+    "core.SmartLeavesCullingMixin"${mixin_legacy}${mixin_modern}
+  ]
+}

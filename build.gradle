@@ -1,0 +1,4 @@
+// Stonecutter Multi-Version Root Script
+// In Stonecutter multi-version builds with mapBuilds enabled, root build logic
+// is evaluated via stonecutter.gradle.kts, and node builds live under versions/<version>/.
+// Run './gradlew buildAll' to compile across the entire multi-version matrix.
