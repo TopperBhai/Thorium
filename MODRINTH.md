@@ -1,18 +1,11 @@
-<div align="center">
-
 # ☢️ Thorium
-### *Nuclear-Grade Client Optimization Engine for Minecraft*
+### Nuclear-Grade Client Optimization Engine for Minecraft
 
 [![Fabric](https://img.shields.io/badge/Modloader-Fabric-blue?style=for-the-badge&logo=fabric)](https://fabricmc.net/)
 [![Minecraft Versions](https://img.shields.io/badge/Minecraft-1.21.1%20%7C%2026.1%20%7C%2026.2%20%7C%2026.3-brightgreen?style=for-the-badge&logo=minecraft)](https://modrinth.com)
-[![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)](https://github.com/TopperBhai/Thorium)
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github)](https://github.com/TopperBhai/Thorium)
 
-<br/>
-
-**Thorium** is an advanced, client-side rendering and frame-pacing optimization engine engineered from the ground up to **eliminate micro-stutters, flatten frametime spikes, and maximize framerates** without compromising vanilla Minecraft’s visual charm.
-
-</div>
+**Thorium** is an advanced client-side rendering and frame-pacing optimization engine engineered from the ground up to **eliminate micro-stutters, flatten frametime spikes, and maximize framerates** without compromising vanilla Minecraft’s visual charm.
 
 ---
 
@@ -102,7 +95,7 @@ All hotkeys can be rebound in **Options → Controls → Key Binds → Thorium**
   * Java 25 for Minecraft 26.x
 
 ### How to Install:
-1. Download the jar matching your exact Minecraft version from the [Versions tab](https://modrinth.com).
+1. Download the jar matching your exact Minecraft version from the Versions tab.
 2. Place the downloaded `.jar` file into your `.minecraft/mods` folder.
 3. Launch Minecraft with your Fabric profile and enjoy stutter-free gaming!
 
@@ -110,32 +103,20 @@ All hotkeys can be rebound in **Options → Controls → Key Binds → Thorium**
 
 ## ❓ Frequently Asked Questions
 
-<details>
-<summary><b>Is Thorium client-side or server-side?</b></summary>
-Thorium is 100% client-side. You do not need it installed on the server to join multiplayer servers, realms, or LAN games.
-</details>
+**Q: Is Thorium client-side or server-side?**  
+A: Thorium is 100% client-side. You do not need it installed on the server to join multiplayer servers, realms, or LAN games.
 
-<details>
-<summary><b>Can I use Thorium on servers like Hypixel or multiplayer SMPs?</b></summary>
-Yes. Thorium strictly optimizes local rendering, memory allocation, and client-side frame pacing. It contains zero gameplay modifications, cheats, or packet tampering, making it safe for all multiplayer networks.
-</details>
+**Q: Can I use Thorium on servers like Hypixel or multiplayer SMPs?**  
+A: Yes. Thorium strictly optimizes local rendering, memory allocation, and client-side frame pacing. It contains zero gameplay modifications, cheats, or packet tampering, making it safe for all multiplayer networks.
 
-<details>
-<summary><b>How is Thorium different from other optimization mods?</b></summary>
-While other mods focus strictly on chunk meshing or shaders, Thorium focuses on the full pipeline: frame pacing, GC stutter prevention, budgeted section uploads, and real-time telemetry diagnostics with a sleek modern user interface.
-</details>
+**Q: How is Thorium different from other optimization mods?**  
+A: While other mods focus strictly on chunk meshing or shaders, Thorium focuses on the full pipeline: frame pacing, GC stutter prevention, budgeted section uploads, and real-time telemetry diagnostics with a sleek modern user interface.
 
-<details>
-<summary><b>Does Thorium change how Minecraft looks?</b></summary>
-No. In Balanced and Nuclear modes, vanilla lighting, textures, block models, and visual fidelity remain completely identical to vanilla Minecraft.
-</details>
+**Q: Does Thorium change how Minecraft looks?**  
+A: No. In Balanced and Nuclear modes, vanilla lighting, textures, block models, and visual fidelity remain completely identical to vanilla Minecraft.
 
 ---
-
-<div align="center">
 
 Crafted with precision for competitive players, speedrunners, and builders who demand uncompromising smoothness.
 
 **[Report an Issue](https://github.com/TopperBhai/Thorium/issues)** • **[GitHub Repository](https://github.com/TopperBhai/Thorium)**
-
-</div>
