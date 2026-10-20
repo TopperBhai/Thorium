@@ -3,7 +3,9 @@ package dev.hyperionfps;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import dev.hyperionfps.config.ThoriumConfig;
 import dev.hyperionfps.core.RenderThreads;
+import dev.hyperionfps.core.ThoriumSafety;
 import dev.hyperionfps.culling.AsyncOcclusionCuller;
 import dev.hyperionfps.mixin.HyperionMixinPlugin;
 import dev.hyperionfps.version.VersionBridge;
@@ -28,6 +30,22 @@ public final class HyperionFPS implements ClientModInitializer {
         LOGGER.info("Render thread captured: {}",
                 RenderThreads.isCaptured() ? "yes -> '" + RenderThreads.clientThread().getName() + "'" : "pending");
 
+        // Safe mode short-circuits every optimisation. The mixins were already
+        // skipped by the router; this also keeps the background subsystems dormant.
+        if (ThoriumSafety.isSafeMode()) {
+            LOGGER.warn("Thorium SAFE MODE active - no optimisations are running.");
+            return;
+        }
+
+        // Restore persisted user settings (hardware preset, toggles, throttle rates)
+        // before the first frame so the player never sees the default profile flash.
+        try {
+            ThoriumConfig.get().applyToSubsystems();
+        } catch (Throwable failure) {
+            LOGGER.warn("Could not restore persisted Thorium settings ({}); using defaults",
+                    failure.toString());
+        }
+
         // Initialize Phase 3 Async Occlusion Culling Engine
         AsyncOcclusionCuller.init();
         LOGGER.info("Async Occlusion Culling Engine online: daemon thread running");
@@ -37,9 +55,11 @@ public final class HyperionFPS implements ClientModInitializer {
         LOGGER.info("Async Light Propagation Engine online: daemon worker active");
 
         // Initialize Advanced Fabric API subsystems if available
+        boolean fabricHooksLoaded = false;
         try {
             Class<?> fabricHooks = Class.forName("dev.hyperionfps.fabric.ThoriumFabricHooks");
             fabricHooks.getMethod("init").invoke(null);
+            fabricHooksLoaded = true;
         } catch (Throwable ignored) {
             LOGGER.debug("Fabric API advanced hooks not loaded (standalone mode)");
         }
@@ -52,7 +72,7 @@ public final class HyperionFPS implements ClientModInitializer {
                 "particle-batching=ready",
                 "adaptive-distance=ready",
                 "async-lighting=active",
-                "fabric-api=integrated",
+                "fabric-api=" + (fabricHooksLoaded ? "integrated" : "standalone"),
                 "version-bridge=active"));
     }
 

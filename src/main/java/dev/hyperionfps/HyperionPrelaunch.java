@@ -1,6 +1,7 @@
 package dev.hyperionfps;
 
 import dev.hyperionfps.core.ThreadGovernor;
+import dev.hyperionfps.core.ThoriumSafety;
 import dev.hyperionfps.env.LauncherEnvironment;
 import dev.hyperionfps.memory.IdleJanitor;
 import dev.hyperionfps.version.GameVersion;
@@ -18,6 +19,11 @@ import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
  *   <li>Spawns a lightweight thread governor daemon that continuously ensures
  *       newly created render and worker threads run at maximum scheduling priority.</li>
  * </ul>
+ *
+ * <p><b>Robustness contract.</b> This entrypoint runs before the game window exists,
+ * so nothing here may prevent Minecraft from starting. Every step is individually
+ * guarded, and the whole body is wrapped so that even an unexpected failure can only
+ * produce a log line - never a crash. Safe mode short-circuits all optimisation.</p>
  */
 public final class HyperionPrelaunch implements PreLaunchEntrypoint {
 
@@ -33,6 +39,27 @@ public final class HyperionPrelaunch implements PreLaunchEntrypoint {
         }
         executed = true;
 
+        // Read the escape hatch first: if safe mode is requested, do nothing else.
+        ThoriumSafety.refreshPropertySafeMode();
+
+        try {
+            if (ThoriumSafety.isSafeMode()) {
+                HyperionFPS.LOGGER.warn("==============================================================");
+                HyperionFPS.LOGGER.warn(" Thorium SAFE MODE - no optimisations are being applied.");
+                HyperionFPS.LOGGER.warn(" Disable safe mode by removing -D{} from the JVM args",
+                        ThoriumSafety.SAFE_MODE_PROPERTY);
+                HyperionFPS.LOGGER.warn("==============================================================");
+                return;
+            }
+            runOptimisations();
+        } catch (Throwable failure) {
+            // Never let an optimisation failure stop the game from launching.
+            HyperionFPS.LOGGER.warn("Thorium pre-launch handling failed ({}); "
+                    + "continuing without Thorium optimisations.", failure.toString());
+        }
+    }
+
+    private void runOptimisations() {
         System.setProperty("hyperionfps.prelaunch", "true");
 
         // Suppress telemetry globally via JVM flags
@@ -45,23 +72,11 @@ public final class HyperionPrelaunch implements PreLaunchEntrypoint {
         try {
             bootstrap.setPriority(Thread.MAX_PRIORITY);
         } catch (Throwable ignored) {
+            // Some Android runtimes reject priority changes; not critical.
         }
 
         // Launch background governor to elevate newly spawned Render and Worker threads
-        Thread governorThread = new Thread(() -> {
-            for (int i = 0; i < 20; i++) {
-                try {
-                    ThreadGovernor.boostActiveMinecraftThreads();
-                    Thread.sleep(500L);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-            }
-        }, "Thorium-ThreadGovernor");
-        governorThread.setDaemon(true);
-        governorThread.setPriority(Thread.NORM_PRIORITY);
-        governorThread.start();
+        startGovernorDaemon();
 
         GameVersion version = GameVersionDetector.detect();
         LauncherEnvironment.Probe environment = LauncherEnvironment.detect();
@@ -93,5 +108,35 @@ public final class HyperionPrelaunch implements PreLaunchEntrypoint {
         HyperionFPS.LOGGER.info(" Pre-launch handling finished in {} ms",
                 (System.nanoTime() - BOOT_NANOS) / 1_000_000L);
         HyperionFPS.LOGGER.info("==============================================================");
+    }
+
+    /**
+     * Starts the background thread-priority governor.
+     *
+     * <p>Kept separate so that a failure to start the daemon cannot abort the rest of
+     * the pre-launch sequence.</p>
+     */
+    private void startGovernorDaemon() {
+        try {
+            Thread governorThread = new Thread(() -> {
+                for (int i = 0; i < 20; i++) {
+                    try {
+                        ThreadGovernor.boostActiveMinecraftThreads();
+                        Thread.sleep(500L);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    } catch (Throwable failure) {
+                        break;
+                    }
+                }
+            }, "Thorium-ThreadGovernor");
+            governorThread.setDaemon(true);
+            governorThread.setPriority(Thread.NORM_PRIORITY);
+            governorThread.start();
+        } catch (Throwable failure) {
+            HyperionFPS.LOGGER.warn("Could not start the Thorium thread governor ({}); continuing.",
+                    failure.toString());
+        }
     }
 }

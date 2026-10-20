@@ -9,7 +9,9 @@ import dev.hyperionfps.anim.ThoriumEntityLodThrottler;
 import dev.hyperionfps.audio.ThoriumSoundGovernor;
 import dev.hyperionfps.batch.ThoriumImmediateBatcher;
 import dev.hyperionfps.chunk.ThoriumChunkUploadPacer;
+import dev.hyperionfps.config.ThoriumConfig;
 import dev.hyperionfps.core.ThreadGovernor;
+import dev.hyperionfps.core.ThoriumSafety;
 import dev.hyperionfps.culling.AsyncOcclusionCuller;
 import dev.hyperionfps.culling.ThoriumBvhCuller;
 import dev.hyperionfps.frame.ThoriumFrametimeTracker;
@@ -50,7 +52,7 @@ public class ThoriumVideoSettingsScreen extends Screen {
 
     public static volatile boolean openingVanilla = false;
     private static Tab currentTab = Tab.GENERAL;
-    private static String activePreset = "BALANCED";
+    private static String activePreset = ThoriumConfig.get().getString(ThoriumConfig.KEY_PRESET, "BALANCED");
 
     private final Screen lastScreen;
     private final List<AbstractWidget> tabWidgets = new ArrayList<>();
@@ -153,7 +155,7 @@ public class ThoriumVideoSettingsScreen extends Screen {
                         SettingControlType.CHECKBOX,
                         () -> dev.hyperionfps.gui.ThoriumGuiManager.isHudEnabled(),
                         b -> dev.hyperionfps.gui.ThoriumGuiManager.setHudEnabled(!dev.hyperionfps.gui.ThoriumGuiManager.isHudEnabled()),
-                        "Live In-Game HUD displaying real-time FPS, frametime stability score, and a 126-sample micro-stutter graph. (Hotkey: F6)",
+                        "Live In-Game HUD displaying real-time FPS, frametime stability score, and a 128-sample micro-stutter graph. (Hotkey: F6)",
                         "★ Real-Time Telemetry"));
                 currentY += rowH + rowGap;
 
@@ -258,6 +260,21 @@ public class ThoriumVideoSettingsScreen extends Screen {
 
             case ADVANCED -> {
                 addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
+                        "Safe Mode (Disable Thorium)",
+                        () -> ThoriumSafety.isSafeMode() ? "ON" : "OFF",
+                        SettingControlType.CHECKBOX,
+                        () -> ThoriumSafety.isSafeMode(),
+                        b -> {
+                            boolean next = !ThoriumSafety.isSafeMode();
+                            ThoriumSafety.setConfigSafeMode(next);
+                            ThoriumConfig.get().setBoolean(ThoriumConfig.KEY_SAFE_MODE, next);
+                            ThoriumConfig.get().saveNow();
+                        },
+                        "Emergency escape hatch. Disables every Thorium mixin and optimisation on the next launch. Turn this on if Thorium causes a crash or a rendering problem on your device.",
+                        "âš¡ Emergency Disable"));
+                currentY += rowH + rowGap;
+
+                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
                         "Sound Engine Governor",
                         () -> ThoriumSoundGovernor.isEnabled() ? "ON" : "OFF",
                         SettingControlType.CHECKBOX,
@@ -352,6 +369,8 @@ public class ThoriumVideoSettingsScreen extends Screen {
                 ThoriumChunkUploadPacer.setEnabled(true);
             }
         }
+        ThoriumConfig.get().setString(ThoriumConfig.KEY_PRESET, preset);
+        ThoriumConfig.get().saveNow();
     }
 
     @Override
@@ -459,6 +478,7 @@ public class ThoriumVideoSettingsScreen extends Screen {
 
     @Override
     public void onClose() {
+        ThoriumConfig.get().saveNow();
         if (this.minecraft != null) {
             this.minecraft.setScreenAndShow(this.lastScreen);
         }
@@ -489,7 +509,11 @@ public class ThoriumVideoSettingsScreen extends Screen {
                                 SettingControlType controlType, Supplier<Boolean> enabledSupplier,
                                 Consumer<SettingRowButton> onClickAction,
                                 String description, String impactBadge) {
-            super(x, y, width, height, Component.empty(), b -> onClickAction.accept((SettingRowButton) b), DEFAULT_NARRATION);
+            super(x, y, width, height, Component.empty(), b -> {
+                onClickAction.accept((SettingRowButton) b);
+                ThoriumConfig.get().setString(ThoriumConfig.KEY_PRESET, activePreset);
+                ThoriumConfig.get().saveNow();
+            }, DEFAULT_NARRATION);
             this.title = title;
             this.statusSupplier = statusSupplier;
             this.controlType = controlType;

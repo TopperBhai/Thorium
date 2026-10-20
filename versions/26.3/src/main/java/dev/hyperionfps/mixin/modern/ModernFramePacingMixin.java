@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.mojang.renderpearl.api.device.GpuSurface;
 import com.mojang.renderpearl.backend.opengl.GlSurface;
 
+import dev.hyperionfps.core.ThoriumSafety;
 import dev.hyperionfps.frame.FramePacing;
 
 /**
@@ -24,8 +25,17 @@ public abstract class ModernFramePacingMixin {
     private static void hyperionfps$enforceUncappedVsync(GpuSurface.Configuration configuration, CallbackInfo callbackInfo) {
         boolean vsyncDisabled = configuration.presentMode() != GpuSurface.PresentMode.FIFO
                 && configuration.presentMode() != GpuSurface.PresentMode.FIFO_RELAXED;
+        if (ThoriumSafety.isSafeMode()) {
+            return;
+        }
         if (FramePacing.inBootPhase() || vsyncDisabled) {
-            if (SDLVideo.SDL_GL_SetSwapInterval(0)) {
+            boolean applied = false;
+            try {
+                applied = SDLVideo.SDL_GL_SetSwapInterval(0);
+            } catch (Throwable failure) {
+                applied = false;
+            }
+            if (applied) {
                 FramePacing.reportUncapped("SDL3 SDL_GL_SetSwapInterval(0)");
             } else {
                 FramePacing.reportUncappedRejected("SDL3 SDL_GL_SetSwapInterval(0)");

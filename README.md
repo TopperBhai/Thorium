@@ -4,7 +4,7 @@
 ### *Nuclear-Grade Client Optimization Engine for Minecraft*
 
 [![Fabric](https://img.shields.io/badge/Modloader-Fabric-blue?style=for-the-badge&logo=fabric)](https://fabricmc.net/)
-[![Minecraft Versions](https://img.shields.io/badge/Minecraft-1.21.1%20%7C%2026.1%20%7C%2026.2%20%7C%2026.3-brightgreen?style=for-the-badge&logo=minecraft)](https://modrinth.com)
+[![Minecraft Versions](https://img.shields.io/badge/Minecraft-1.21.1%20%7C%201.21.11%20%7C%2026.1%20%7C%2026.2%20%7C%2026.3-brightgreen?style=for-the-badge&logo=minecraft)](https://modrinth.com)
 [![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)](https://github.com/TopperBhai/Thorium)
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github)](https://github.com/TopperBhai/Thorium)
 
@@ -40,7 +40,7 @@ Thorium provides three pre-configured hardware profiles built directly into the 
 
 ### 1. 📊 Built-In Nuclear Stutter Monitor (`F6`)
 Track your gameplay fluidity in real time with an ultra-clean, frosted-glass telemetry HUD inspired by RivaTuner and Sodium:
-* **Frametime Sparkline:** 117-sample live history graph with colored thresholds (Cyan: >120 FPS, Green: 60–120 FPS, Amber: 30–60 FPS, Red: Stutter Spike).
+* **Frametime Sparkline:** 128-sample live history graph with colored thresholds (Cyan: >120 FPS, Green: 60–120 FPS, Amber: 30–60 FPS, Red: Stutter Spike).
 * **Smoothness Score %:** Live stability rating calculating exact frame delivery consistency.
 * **Telemetry Data:** Current FPS, Frametime (ms), Average ms, Max Spike ms, Detected Hitch Count, and Active RAM Usage.
 
@@ -88,6 +88,24 @@ All hotkeys can be rebound in **Options → Controls → Key Binds → Thorium**
 * `F7` — **Toggle Extreme FPS Boost Mode**
 * `F8` — **Open Thorium Video Settings Console** *(also accessible via standard Video Settings)*
 
+A dedicated **Thorium Settings** button is also added to the main menu and the Options
+screen, so the console is reachable on every version even if a hotkey conflicts.
+
+---
+
+## 🛟 Safe Mode (Emergency Escape Hatch)
+
+If Thorium causes a crash or a rendering problem on your device, you can disable every
+optimisation without uninstalling the mod:
+
+* **From the game:** Settings console → **Advanced** tab → **Safe Mode** → restart.
+* **From the launcher:** add `-Dhyperionfps.safeMode=true` to the JVM arguments. This
+  is honoured before Minecraft loads a single class, so it works even when the game
+  cannot start at all.
+
+With safe mode active, the startup log prints
+`Thorium SAFE MODE is ON - every mixin and optimisation is disabled.`
+
 ---
 
 ## 🧩 Compatibility & Installation
@@ -95,7 +113,7 @@ All hotkeys can be rebound in **Options → Controls → Key Binds → Thorium**
 ### Requirements:
 * **Fabric Loader:** `0.16.0+` (or latest Fabric for 26.x)
 * **Minecraft Version Support:**
-  * `1.21.1` (Classic Yarn Mappings)
+  * `1.21.1`, `1.21.11` (Classic Yarn Mappings)
   * `26.1`, `26.2`, `26.3` (Modern Unobfuscated Engine)
 * **Java:**
   * Java 21 for Minecraft 1.21.x

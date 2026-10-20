@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
+import dev.hyperionfps.core.ThoriumSafety;
 import dev.hyperionfps.version.Era;
 import dev.hyperionfps.version.GameVersion;
 import dev.hyperionfps.version.GameVersionDetector;
@@ -56,6 +57,14 @@ public final class HyperionMixinPlugin implements IMixinConfigPlugin {
     @Override
     public void onLoad(String mixinPackage) {
         this.configPackage = mixinPackage;
+
+        // Safe mode is honoured here, before a single Minecraft class is touched, so
+        // that a player whose game cannot start with Thorium can always recover.
+        ThoriumSafety.refreshPropertySafeMode();
+        if (ThoriumSafety.isSafeMode()) {
+            LOGGER.warn("Thorium safe mode active - ALL mixins will be skipped.");
+        }
+
         LOGGER.info("Mixin router online | minecraft={} | era={} | names={} | package={}",
                 GAME_VERSION, ERA.name().toLowerCase(Locale.ROOT), ERA.runtimeNamespace(), mixinPackage);
     }
@@ -67,6 +76,13 @@ public final class HyperionMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+        // Safe mode disables the mod entirely, including the core mixins.
+        if (ThoriumSafety.isSafeMode()) {
+            ROUTED_OUT.incrementAndGet();
+            LOGGER.debug("Safe mode active, skipping {}", mixinClassName);
+            return false;
+        }
+
         Family family = familyOf(mixinClassName);
         boolean apply = switch (family) {
             case LEGACY -> ERA == Era.LEGACY;
@@ -124,6 +140,7 @@ public final class HyperionMixinPlugin implements IMixinConfigPlugin {
     public static String status() {
         return "minecraft=" + GAME_VERSION
                 + " era=" + ERA.name().toLowerCase(Locale.ROOT)
+                + " safeMode=" + ThoriumSafety.isSafeMode()
                 + " eligible=" + ROUTED_IN
                 + " skipped=" + ROUTED_OUT
                 + " applied=" + APPLIED;

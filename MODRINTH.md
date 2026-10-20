@@ -42,12 +42,26 @@ A clean, translucent settings menu with 100% working options and 3 built-in hard
 * **F7:** Toggle Extreme FPS Boost Mode
 * **F8:** Open Thorium Video Settings
 
+A dedicated **Thorium Settings** button is also present on the main menu and the
+Options screen.
+
+---
+
+## Safe Mode
+
+If Thorium causes a crash or a rendering issue on your device, disable every
+optimisation without uninstalling:
+
+* In-game: **Thorium Settings → Advanced → Safe Mode**, then restart.
+* Launcher: add `-Dhyperionfps.safeMode=true` to the JVM arguments. This is honoured
+  before Minecraft loads, so it works even if the game cannot start.
+
 ---
 
 ## Compatibility
 
 * **Modloader:** Fabric Loader
-* **Supported Minecraft Versions:** 1.21.1, 26.1, 26.2, 26.3
+* **Supported Minecraft Versions:** 1.21.1, 1.21.11, 26.1, 26.2, 26.3
 * **Safe for Multiplayer:** Yes, 100% client-side. Safe to use on Hypixel, Realms, and public SMP servers.
 
 ---

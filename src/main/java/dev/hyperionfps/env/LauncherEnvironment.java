@@ -62,9 +62,7 @@ public final class LauncherEnvironment {
     }
 
     public static Probe detect() {
-        String commandLine = ProcessHandle.current().info().commandLine()
-                .orElse("")
-                .toLowerCase(Locale.ROOT);
+        String commandLine = readCommandLine();
 
         List<String> signals = new ArrayList<>(MAX_SIGNALS);
         String launcherGuess = null;
@@ -77,7 +75,7 @@ public final class LauncherEnvironment {
             }
         }
 
-        for (Map.Entry<String, String> env : System.getenv().entrySet()) {
+        for (Map.Entry<String, String> env : readEnvironment().entrySet()) {
             if (signals.size() >= MAX_SIGNALS) {
                 break;
             }
@@ -111,5 +109,32 @@ public final class LauncherEnvironment {
                 customHeap,
                 gcHint,
                 maxHeapMiB);
+    }
+
+    /**
+     * Reads the current process command line, defensively.
+     *
+     * <p>{@link ProcessHandle} is not implemented uniformly across every JVM and
+     * Android runtime: some throw {@link UnsupportedOperationException} instead of
+     * returning an empty result. The probe is diagnostic only, so a failure here must
+     * never propagate - it degrades to an empty command line.</p>
+     */
+    private static String readCommandLine() {
+        try {
+            return ProcessHandle.current().info().commandLine()
+                    .orElse("")
+                    .toLowerCase(Locale.ROOT);
+        } catch (Throwable unavailable) {
+            return "";
+        }
+    }
+
+    /** Reads the environment map, defensively - some sandboxes deny access. */
+    private static Map<String, String> readEnvironment() {
+        try {
+            return System.getenv();
+        } catch (Throwable unavailable) {
+            return Map.of();
+        }
     }
 }
