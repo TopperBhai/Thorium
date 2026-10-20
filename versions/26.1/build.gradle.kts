@@ -25,6 +25,13 @@ dependencies {
 
 tasks.named<Test>("test") {
     useJUnitPlatform()
+    // The mixin target audit needs the Minecraft class files at test runtime. Loom puts
+    // them on the compile classpath but not on the test runtime classpath, so the path is
+    // handed to the test explicitly (see MixinTargetAuditTest).
+    doFirst {
+        systemProperty("thorium.compileClasspath",
+                configurations.getByName("compileClasspath").asPath)
+    }
 }
 
 java {
@@ -49,7 +56,7 @@ val templateValues = mapOf(
     "minecraft" to (project.findProperty("mod.mc_range") ?: minecraftVersion).toString(),
     "java_version" to "25",
     "mixin_legacy" to "",
-    "mixin_modern" to ",\n    \"modern.ModernMthMixin\",\n    \"modern.ModernOptionsScreenMixin\",\n    \"modern.ModernPauseScreenMixin\",\n    \"modern.ModernTitleScreenMixin\",\n    \"modern.ModernKeyboardMixin\",\n    \"modern.ModernHudBatchingMixin\",\n    \"modern.ModernFramePacingMixin\",\n    \"modern.ModernEntityCullingMixin\",\n    \"modern.ModernBlockEntityCullingMixin\",\n    \"modern.ModernFogMixin\",\n    \"modern.ModernWeatherMixin\",\n    \"modern.ModernShadowMixin\",\n    \"modern.ModernCloudsMixin\",\n    \"modern.ModernEntityLodMixin\",\n    \"modern.ModernSoundEngineMixin\",\n    \"modern.ModernTextureAnimationMixin\""
+    "mixin_modern" to ",\n    \"modern.ModernMthMixin\",\n    \"modern.ModernOptionsScreenMixin\",\n    \"modern.ModernPauseScreenMixin\",\n    \"modern.ModernTitleScreenMixin\",\n    \"modern.ModernKeyboardMixin\",\n    \"modern.ModernHudBatchingMixin\",\n    \"modern.ModernLevelRendererFrameMixin\",\n    \"modern.ModernFramePacingMixin\",\n    \"modern.ModernEntityCullingMixin\",\n    \"modern.ModernBlockEntityCullingMixin\",\n    \"modern.ModernFogMixin\",\n    \"modern.ModernWeatherMixin\",\n    \"modern.ModernShadowMixin\",\n    \"modern.ModernCloudsMixin\",\n    \"modern.ModernEntityLodMixin\",\n    \"modern.ModernSoundEngineMixin\",\n    \"modern.ModernTextureAnimationMixin\""
 )
 
 tasks.named<ProcessResources>("processResources") {

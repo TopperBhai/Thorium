@@ -22,6 +22,7 @@ import dev.hyperionfps.culling.AsyncOcclusionCuller;
 import dev.hyperionfps.culling.OcclusionGrid;
 import dev.hyperionfps.culling.SectionCullingEngine;
 import dev.hyperionfps.culling.ThoriumBvhCuller;
+import dev.hyperionfps.core.ThoriumCompatibility;
 import dev.hyperionfps.core.ThoriumSafety;
 import dev.hyperionfps.frame.ThoriumFramePacer;
 import dev.hyperionfps.gui.ThoriumGuiManager;
@@ -29,7 +30,7 @@ import dev.hyperionfps.input.ThoriumInputPacer;
 import dev.hyperionfps.instancing.EntityInstancer;
 import dev.hyperionfps.lighting.AsyncLightEngine;
 import dev.hyperionfps.particle.ParticleBatchEngine;
-import dev.hyperionfps.particle.ThoriumParticleSimulator;
+import dev.hyperionfps.particle.ThoriumParticleBudget;
 import dev.hyperionfps.render.batching.HudBatcher;
 import dev.hyperionfps.texture.ThoriumTextureThrottler;
 
@@ -75,6 +76,9 @@ public final class ThoriumConfig {
     public static final String KEY_BVH = "culling.bvh.enabled";
     public static final String KEY_ENTITY_LOD = "anim.entityLod.enabled";
     public static final String KEY_FRAME_PACER = "frame.pacer.enabled";
+
+    /** Target framerate cap for the frame pacer; {@code 0} means uncapped. */
+    public static final String KEY_FRAME_TARGET_FPS = "frame.pacer.targetFps";
     public static final String KEY_INPUT_PACER = "input.pacer.enabled";
     public static final String KEY_CHUNK_PACER = "chunk.uploader.enabled";
     public static final String KEY_TEXTURE_THROTTLE = "texture.throttler.enabled";
@@ -82,7 +86,7 @@ public final class ThoriumConfig {
     public static final String KEY_IMMEDIATE_BATCHER = "batch.immediate.enabled";
     public static final String KEY_HUD_BATCHER = "batch.hud.enabled";
     public static final String KEY_SOUND_GOVERNOR = "audio.governor.enabled";
-    public static final String KEY_PARTICLE_SIM = "particle.simulator.enabled";
+    public static final String KEY_PARTICLE_BUDGET = "particle.budget.enabled";
     public static final String KEY_PARTICLE_BATCHER = "particle.batcher.enabled";
     public static final String KEY_ENTITY_INSTANCER = "entity.instancer.enabled";
     public static final String KEY_LIGHT_ENGINE = "lighting.async.enabled";
@@ -90,6 +94,12 @@ public final class ThoriumConfig {
 
     /** Persisted safe-mode switch - disables every Thorium optimisation. */
     public static final String KEY_SAFE_MODE = "safeMode";
+
+    /** Whether Thorium stands down for a competing renderer (Sodium family). */
+    public static final String KEY_COMPAT_AUTO_YIELD = "compat.autoYield";
+
+    /** Whether the fast-math overrides of {@code Mth} may run. */
+    public static final String KEY_FAST_MATH = "math.fast.enabled";
 
     private static final Logger LOGGER = LoggerFactory.getLogger("Thorium/Config");
 
@@ -294,6 +304,7 @@ public final class ThoriumConfig {
         run("BVH culler", () -> ThoriumBvhCuller.setEnabled(getBoolean(KEY_BVH, true)));
         run("entity LOD", () -> ThoriumEntityLodThrottler.setEnabled(getBoolean(KEY_ENTITY_LOD, true)));
         run("frame pacer", () -> ThoriumFramePacer.setEnabled(getBoolean(KEY_FRAME_PACER, true)));
+        run("frame target fps", () -> ThoriumFramePacer.setTargetFps(getInt(KEY_FRAME_TARGET_FPS, 0)));
         run("input pacer", () -> ThoriumInputPacer.setEnabled(getBoolean(KEY_INPUT_PACER, true)));
         run("chunk upload pacer", () -> ThoriumChunkUploadPacer.setEnabled(getBoolean(KEY_CHUNK_PACER, true)));
         run("texture throttler", () -> ThoriumTextureThrottler.setEnabled(getBoolean(KEY_TEXTURE_THROTTLE, true)));
@@ -301,11 +312,12 @@ public final class ThoriumConfig {
         run("immediate batcher", () -> ThoriumImmediateBatcher.setEnabled(getBoolean(KEY_IMMEDIATE_BATCHER, true)));
         run("HUD batcher", () -> HudBatcher.setEnabled(getBoolean(KEY_HUD_BATCHER, true)));
         run("sound governor", () -> ThoriumSoundGovernor.setEnabled(getBoolean(KEY_SOUND_GOVERNOR, true)));
-        run("particle simulator", () -> ThoriumParticleSimulator.setEnabled(getBoolean(KEY_PARTICLE_SIM, true)));
+        run("particle budget", () -> ThoriumParticleBudget.setEnabled(getBoolean(KEY_PARTICLE_BUDGET, true)));
         run("particle batcher", () -> ParticleBatchEngine.getInstance().setEnabled(getBoolean(KEY_PARTICLE_BATCHER, true)));
         run("entity instancer", () -> EntityInstancer.getInstance().setEnabled(getBoolean(KEY_ENTITY_INSTANCER, true)));
         run("light engine", () -> AsyncLightEngine.getInstance().setEnabled(getBoolean(KEY_LIGHT_ENGINE, true)));
         run("adaptive distance", () -> AdaptiveDistanceController.getInstance().setEnabled(getBoolean(KEY_ADAPTIVE_DISTANCE, true)));
+        run("fast math", () -> ThoriumCompatibility.setFastMathEnabled(getBoolean(KEY_FAST_MATH, false)));
 
         LOGGER.info("Applied persisted Thorium settings (preset={}, hud={}, extremeFps={})",
                 getString(KEY_PRESET, "BALANCED"),
@@ -329,6 +341,7 @@ public final class ThoriumConfig {
         setBoolean(KEY_BVH, ThoriumBvhCuller.isEnabled());
         setBoolean(KEY_ENTITY_LOD, ThoriumEntityLodThrottler.isEnabled());
         setBoolean(KEY_FRAME_PACER, ThoriumFramePacer.isEnabled());
+        setInt(KEY_FRAME_TARGET_FPS, ThoriumFramePacer.getTargetFps());
         setBoolean(KEY_INPUT_PACER, ThoriumInputPacer.isEnabled());
         setBoolean(KEY_CHUNK_PACER, ThoriumChunkUploadPacer.isEnabled());
         setBoolean(KEY_TEXTURE_THROTTLE, ThoriumTextureThrottler.isEnabled());
@@ -336,11 +349,12 @@ public final class ThoriumConfig {
         setBoolean(KEY_IMMEDIATE_BATCHER, ThoriumImmediateBatcher.isEnabled());
         setBoolean(KEY_HUD_BATCHER, HudBatcher.isEnabled());
         setBoolean(KEY_SOUND_GOVERNOR, ThoriumSoundGovernor.isEnabled());
-        setBoolean(KEY_PARTICLE_SIM, ThoriumParticleSimulator.isEnabled());
+        setBoolean(KEY_PARTICLE_BUDGET, ThoriumParticleBudget.isEnabled());
         setBoolean(KEY_PARTICLE_BATCHER, ParticleBatchEngine.getInstance().isEnabled());
         setBoolean(KEY_ENTITY_INSTANCER, EntityInstancer.getInstance().isEnabled());
         setBoolean(KEY_LIGHT_ENGINE, AsyncLightEngine.getInstance().isEnabled());
         setBoolean(KEY_ADAPTIVE_DISTANCE, AdaptiveDistanceController.getInstance().isEnabled());
+        setBoolean(KEY_FAST_MATH, ThoriumCompatibility.isFastMathEnabled());
     }
 
     /**

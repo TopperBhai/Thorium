@@ -11,7 +11,7 @@ import dev.hyperionfps.anim.ThoriumEntityLodThrottler;
 import dev.hyperionfps.audio.ThoriumSoundGovernor;
 import dev.hyperionfps.culling.AsyncOcclusionCuller;
 import dev.hyperionfps.input.ThoriumInputPacer;
-import dev.hyperionfps.particle.ThoriumParticleSimulator;
+import dev.hyperionfps.particle.ThoriumParticleBudget;
 
 class BeyondSodiumFeaturesTest {
 
@@ -21,7 +21,8 @@ class BeyondSodiumFeaturesTest {
         AsyncOcclusionCuller.setExtremeFpsMode(false);
         ThoriumEntityLodThrottler.setEnabled(true);
         ThoriumSoundGovernor.setEnabled(true);
-        ThoriumParticleSimulator.setEnabled(true);
+        ThoriumParticleBudget.setEnabled(true);
+        ThoriumParticleBudget.resetWindow();
         ThoriumInputPacer.setEnabled(true);
     }
 
@@ -34,9 +35,8 @@ class BeyondSodiumFeaturesTest {
         assertTrue(AsyncOcclusionCuller.isExtremeFpsMode());
 
         // In extreme mode, particles beyond 12 blocks (e.g. 15 blocks away) must be culled
-        AsyncOcclusionCuller.onFrameBegin(0, 0, 0, null, null);
+        dev.hyperionfps.frame.ThoriumFrameContext.beginWorldFrame(0, 0, 0, null, null);
         assertTrue(AsyncOcclusionCuller.shouldCullParticle(15, 0, 0));
-
         AsyncOcclusionCuller.setExtremeFpsMode(false);
         assertFalse(AsyncOcclusionCuller.isExtremeFpsMode());
     }
@@ -67,15 +67,24 @@ class BeyondSodiumFeaturesTest {
     }
 
     @Test
-    void testParticleSimulator() {
-        assertTrue(ThoriumParticleSimulator.isEnabled());
+    void testParticleBudget() {
+        assertTrue(ThoriumParticleBudget.isEnabled());
 
-        // Empty or null collections do not fail
-        ThoriumParticleSimulator.tickParticles(null);
-        ThoriumParticleSimulator.tickParticles(java.util.Collections.emptyList());
+        ThoriumParticleBudget.resetWindow();
+        // The budget admits particles until the limit is reached, then rejects them.
+        for (int i = 0; i < ThoriumParticleBudget.DEFAULT_BUDGET; i++) {
+            assertTrue(ThoriumParticleBudget.admit(ThoriumParticleBudget.DEFAULT_BUDGET));
+        }
+        assertFalse(ThoriumParticleBudget.admit(ThoriumParticleBudget.DEFAULT_BUDGET));
+        assertTrue(ThoriumParticleBudget.getRejected() > 0);
 
-        ThoriumParticleSimulator.setEnabled(false);
-        assertFalse(ThoriumParticleSimulator.isEnabled());
+        // A disabled budget never rejects anything.
+        ThoriumParticleBudget.setEnabled(false);
+        assertFalse(ThoriumParticleBudget.isEnabled());
+        assertTrue(ThoriumParticleBudget.admit(1));
+
+        ThoriumParticleBudget.setEnabled(true);
+        ThoriumParticleBudget.resetWindow();
     }
 
     @Test

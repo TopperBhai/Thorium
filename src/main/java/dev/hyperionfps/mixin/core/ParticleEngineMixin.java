@@ -15,6 +15,11 @@ import net.minecraft.core.particles.ParticleOptions;
  *
  * <p>Prevents particle instantiation and simulation when the particle is outside
  * the camera frustum, occluded behind solid walls, or beyond active distance thresholds.</p>
+ *
+ * <p>Only the creation path is hooked. Vanilla's ticking loop is deliberately left
+ * alone: it maintains the per-limit particle counters that decide whether new particles
+ * may be created at all, and re-implementing it would break that bookkeeping (see
+ * {@code ThoriumParticleBudget} for the full story).</p>
  */
 @Mixin(ParticleEngine.class)
 public abstract class ParticleEngineMixin {
@@ -27,11 +32,5 @@ public abstract class ParticleEngineMixin {
         if (AsyncOcclusionCuller.shouldCullParticle(x, y, z)) {
             cir.setReturnValue(null);
         }
-    }
-
-    @Inject(method = "tickParticleList", at = @At("HEAD"), cancellable = true, require = 0)
-    private void thorium$tickParticleListConcurrently(java.util.Collection<Particle> particles, org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
-        dev.hyperionfps.particle.ThoriumParticleSimulator.tickParticles(particles);
-        ci.cancel();
     }
 }

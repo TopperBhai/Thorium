@@ -7,7 +7,7 @@
 This file tells an AI agent (or new human) how to work in this repo *correctly*.
 It is the operational contract. For *what* the product is supposed to do, read
 [`spec.md`](./spec.md). For *where the project currently stands*, read
-[`state.md`](./state.md).
+[`state.md`](./state.md). For *what to build next*, read [`PLAN.md`](./PLAN.md).
 
 ---
 
@@ -41,13 +41,38 @@ All commands are run **from the repository root** and use the bundled Gradle wra
 | :--- | :--- | :--- |
 | Build every version | `./gradlew buildAll` | Aggregates `assemble` for all 5 nodes → `build/dist/*.jar`. Excludes `-sources.jar` / `-dev.jar`. |
 | Build one version | `./gradlew :26.3:build` | Jar lands in `versions/26.3/build/libs/thorium-0.1.1+26.3.jar` |
-| Run tests (one version) | `./gradlew :26.3:test` | **The gate.** 79 tests / 22 classes. |
+| Run tests (one version) | `./gradlew :26.3:test` | **The gate.** 117 tests / 26 classes. |
 | Run tests (all versions) | `./gradlew test` | Same shared test tree compiles into every node. |
 | Compile only | `./gradlew :26.3:compileJava` | Fastest syntax/type check. |
 | Launch dev client | `./gradlew :26.3:runClient` | Interactive; not usable in CI. |
 | Clean | `./gradlew clean` | Also `versions/*/build` dirs are gitignored. |
 
 Windows users can use `gradlew.bat` in place of `./gradlew`.
+
+### The mixin target audit is part of `test`
+
+`src/test/java/dev/hyperionfps/mixin/MixinTargetAuditTest.java` runs once per version
+node and **fails the build** when a registered mixin points at a method that does not
+exist on that node's Minecraft version. Because every injection carries
+`require = 0`, this test is the only thing standing between a renamed Minecraft method
+and a silently dead optimisation.
+
+It works by:
+
+1. reading the **expanded** `thorium.mixins.json` from the classpath (so it covers
+   exactly the mixins that will be loaded, per node),
+2. parsing each mixin class with ASM (`org.objectweb.asm` — already on the classpath
+   through Fabric Loader, no new dependency),
+3. reading the target class from the node's Minecraft jar and walking the inheritance
+   chain, exactly like Mixin resolves a target method.
+
+The Minecraft jar is handed to the test through the `thorium.compileClasspath` system
+property, because Loom puts the Minecraft jar on the **compile** classpath but not on
+the test runtime classpath. Each node's `build.gradle.kts` sets it in the `test`
+task's `doFirst` block.
+
+**When you add a mixin, the audit is what tells you the target is wrong.** Run
+`./gradlew :26.3:test` before you run the game.
 
 ### Version matrix
 
@@ -87,13 +112,13 @@ F:\Toperion Optimization\
 ├── settings.gradle.kts              # Stonecutter root; version matrix + mapBuilds
 ├── stonecutter.gradle.kts           # root build script; `buildAll` aggregate task
 ├── gradle.properties                # mod metadata + shared dep versions
-├── src/main/java/dev/hyperionfps/   # SHARED source — compiles on all 5 versions (57 files)
+├── src/main/java/dev/hyperionfps/   # SHARED source — compiles on all 5 versions (64 files)
 ├── src/main/resources/              # fabric.mod.json + thorium.mixins.json (Gradle templates)
-├── src/test/java/dev/hyperionfps/   # SHARED tests — JUnit 5 (22 classes / 79 tests)
+├── src/test/java/dev/hyperionfps/   # SHARED tests — JUnit 5 (28 classes / 117 tests)
 ├── versions/<mc>/
 │   ├── build.gradle.kts             # per-node plugin + template values
 │   ├── gradle.properties            # deps.minecraft, mod.mc_range
-│   └── src/main/java/dev/hyperionfps/   # VERSION-SPECIFIC source (18–21 files)
+│   └── src/main/java/dev/hyperionfps/   # VERSION-SPECIFIC source (19–21 files)
 │       ├── mixin/legacy/*  or  mixin/modern/*
 │       ├── gui/ThoriumVideoSettingsScreen.java
 │       └── gui/ThoriumModernHudRenderer.java  (modern only)
@@ -259,6 +284,36 @@ worker thread priorities to `Thread.MAX_PRIORITY`, never lowering them.
 
 ---
 
+## 8a. The frame boundary is authoritative ⚠️ read this before adding a hook
+
+There are exactly **two** per-frame entry points, and nothing else may claim to be one:
+
+| Boundary | Hook | Fires | Owns |
+| :--- | :--- | :--- | :--- |
+| **Client frame** | `Minecraft#runTick(Z)V` — `core/MinecraftFrameBoundaryMixin` | once per iteration of Minecraft's main loop, in a world *and* in the menus | frametime sample, frame pacer |
+| **World frame** | `LevelRenderer#renderLevel` / `#render` — `Legacy`/`ModernLevelRendererFrameMixin` | once per rendered world frame | camera context, dynamic distance scale, BVH cache flush, adaptive-distance EMA, entity LOD |
+
+Both funnel into `dev.hyperionfps.frame.ThoriumFrameContext`.
+
+**Why this matters.** Before the frame context existed, the camera context was published
+from `AsyncOcclusionCuller#onFrameBegin`, which the modern entity-culling mixin called
+**once per entity**. Everything downstream — the BVH cache flush, the dynamic distance
+scale, the adaptive-distance EMA — therefore ran hundreds of times per frame with a
+hundreds-of-times-too-small delta. The distance scale collapsed to its 0.35 floor
+within a single frame.
+
+**Rules.**
+
+* Never call `ThoriumFrameContext.beginWorldFrame(...)` from anything but a
+  level-renderer hook.
+* Never publish camera state from a per-entity hook. A per-entity hook may only
+  *read* the published state (`FrustumCache.update(frustum)` is fine — it is
+  idempotent).
+* `Minecraft#runTick(Z)V` has the identical descriptor on all five versions, which is
+  why the client-frame boundary can live in `core/`.
+
+---
+
 ## 9. Testing conventions
 
 * **JUnit 5 (Jupiter)** — `junit-bom:6.1.3`, `useJUnitPlatform()`.
@@ -320,16 +375,27 @@ is an incomplete change.
     up Minecraft internals; never edit it.
 11. **A dead mixin target fails SILENTLY.** Because of `defaultRequire: 0`, an injection
     whose target method no longer exists is a no-op at runtime — no crash, no warning
-    on the 26.x nodes. This already shipped once: `ParticleEngineMixin`'s
-    `tickParticleList` target exists on **1.21.1 only** and is inert on 1.21.11 and all
-    26.x nodes. **Verify your target exists in every node you claim to support.**
-    The check that catches it:
+    on the 26.x nodes. This already shipped twice: `ParticleEngineMixin`'s
+    `tickParticleList` target existed on **1.21.1 only** and was inert on 1.21.11 and
+    all 26.x nodes (state.md G-2), and `ModernFramePacingMixin`'s `Window#updateVsync`
+    target **never existed on 26.2**, so the frame-pacing override was inert there.
+    **This is now caught by the build** — `MixinTargetAuditTest` fails the build when
+    a registered mixin points at a method that does not exist on the running node's
+    Minecraft version (see §2). The manual check is still useful while writing a mixin:
     ```bash
     javap -p <minecraft-client.jar> | grep <targetMethod>
     ```
     Loom's remapper prints `Cannot remap <method> because it does not exist` for the
     remap nodes only (1.21.1, 1.21.11) — treat that warning as a build failure, not
     noise. See `state.md` G-2 and G-12.
+12. **Never re-implement a vanilla game loop.** The particle ticking loop was
+    re-implemented once and the re-implementation skipped vanilla's particle-limit
+    bookkeeping, which permanently stopped the engine from creating particles. If you
+    want to change *when* work happens, hook it — do not replace the loop.
+13. **Do not promise what the code does not do.** Every console switch must change
+    observable behaviour on the version it runs on. A switch that cannot work is
+    shown as *not wired* / *not available*, and the startup log names it under
+    `UNWIRED` (see `ThoriumSubsystemReport`).
 
 ### Safe mode — the emergency escape hatch
 

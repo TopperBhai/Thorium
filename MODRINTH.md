@@ -12,10 +12,10 @@ While most mods only focus on maximum peak FPS, Thorium focuses on 1% and 0.1% f
 A clean, real-time performance overlay showing live frametimes, average and max ms spikes, frame stability score, and active RAM usage.
 
 ### 2. Budgeted Chunk Upload Pacer
-Spreads chunk mesh uploads across frames to eliminate freezing and hitching when loading new terrain or flying with an Elytra.
+Spreads chunk mesh uploads across frames to eliminate freezing and hitching when loading new terrain or flying with an Elytra. Available on Minecraft 1.21.1 and 1.21.11; the 26.x upload pipeline is not hooked yet and the console says so.
 
 ### 3. Occlusion & Frustum Culling
-Automatically skips rendering hidden chunks and concealed block entities (like chests and hoppers) before they reach the GPU, significantly increasing FPS in large bases.
+Automatically skips rendering hidden chunks and concealed block entities (like chests and hoppers) before they reach the GPU, significantly increasing FPS in large bases. The camera context is published once per rendered frame on every supported version.
 
 ### 4. Proactive Memory Management
 Performs smart memory cleanups during idle moments to prevent sudden Java Garbage Collection (GC) lag spikes during gameplay.
@@ -24,7 +24,10 @@ Performs smart memory cleanups during idle moments to prevent sudden Java Garbag
 Optimizes animations and tick updates for distant mobs, keeping gameplay smooth even near massive mob farms.
 
 ### 6. Modern Video Settings Screen (Press F8)
-A clean, translucent settings menu with 100% working options and 3 built-in hardware presets.
+A clean, translucent settings menu with 3 built-in hardware presets. A switch that cannot change anything on your version is shown as *not available* rather than pretending to work.
+
+### 7. Honest Compatibility
+Thorium detects a competing renderer (Sodium, Embeddium, ...) and stands down the overlapping culling so the two never fight over visibility, and it disables its fast-math overrides while a shader pack (Iris, Oculus, OptiFine) is loaded.
 
 ---
 
@@ -63,6 +66,7 @@ optimisation without uninstalling:
 * **Modloader:** Fabric Loader
 * **Supported Minecraft Versions:** 1.21.1, 1.21.11, 26.1, 26.2, 26.3
 * **Safe for Multiplayer:** Yes, 100% client-side. Safe to use on Hypixel, Realms, and public SMP servers.
+* **Other mods:** Sodium / Embeddium and shader packs are supported. Thorium detects them and disables the features that would conflict.
 
 ---
 

@@ -28,6 +28,13 @@ dependencies {
 
 tasks.named<Test>("test") {
     useJUnitPlatform()
+    // The mixin target audit needs the Minecraft class files at test runtime. Loom puts
+    // them on the compile classpath but not on the test runtime classpath, so the path is
+    // handed to the test explicitly (see MixinTargetAuditTest).
+    doFirst {
+        systemProperty("thorium.compileClasspath",
+                configurations.getByName("compileClasspath").asPath)
+    }
 }
 
 java {

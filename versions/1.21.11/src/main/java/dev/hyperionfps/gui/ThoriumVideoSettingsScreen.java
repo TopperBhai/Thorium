@@ -10,6 +10,8 @@ import dev.hyperionfps.audio.ThoriumSoundGovernor;
 import dev.hyperionfps.batch.ThoriumImmediateBatcher;
 import dev.hyperionfps.chunk.ThoriumChunkUploadPacer;
 import dev.hyperionfps.config.ThoriumConfig;
+import dev.hyperionfps.core.ThoriumCompatibility;
+import dev.hyperionfps.core.ThoriumCompatibility;
 import dev.hyperionfps.core.ThreadGovernor;
 import dev.hyperionfps.core.ThoriumSafety;
 import dev.hyperionfps.culling.AsyncOcclusionCuller;
@@ -19,7 +21,7 @@ import dev.hyperionfps.frame.ThoriumFramePacer;
 import dev.hyperionfps.input.ThoriumInputPacer;
 import dev.hyperionfps.memory.IdleJanitor;
 import dev.hyperionfps.memory.ThoriumMemoryOptimizer;
-import dev.hyperionfps.particle.ThoriumParticleSimulator;
+import dev.hyperionfps.particle.ThoriumParticleBudget;
 import dev.hyperionfps.texture.ThoriumTextureThrottler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -174,11 +176,11 @@ public class ThoriumVideoSettingsScreen extends Screen {
 
                 addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
                         "Reflex Low-Latency Input",
-                        () -> ThoriumInputPacer.isEnabled() ? "ON" : "OFF",
-                        SettingControlType.CHECKBOX,
-                        () -> ThoriumInputPacer.isEnabled(),
-                        b -> ThoriumInputPacer.setEnabled(!ThoriumInputPacer.isEnabled()),
-                        "NVIDIA Reflex-style input synchronization. Samples mouse input immediately before frame presentation for instant responsiveness.",
+                        () -> "NOT WIRED",
+                        SettingControlType.ACTION,
+                        () -> false,
+                        b -> b.setTempStatus("NOT AVAILABLE"),
+                        "Not available yet: the input pacer has no call site in the game, so this switch cannot change anything.",
                         "⚡ Minimal Input Lag"));
                 currentY += rowH + rowGap;
 
@@ -190,6 +192,21 @@ public class ThoriumVideoSettingsScreen extends Screen {
                         b -> ThoriumFramePacer.setEnabled(!ThoriumFramePacer.isEnabled()),
                         "High-precision micro-sleep frame pacer. Delivers butter-smooth frame intervals and drastically improves 1% low FPS.",
                         "⚡ Smooth Frametimes"));
+                currentY += rowH + rowGap;
+
+                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
+                        "Target FPS Cap",
+                        () -> ThoriumFramePacer.getTargetFps() <= 0 ? "UNCAPPED" : ThoriumFramePacer.getTargetFps() + " FPS",
+                        SettingControlType.CYCLE,
+                        () -> ThoriumFramePacer.isEnabled(),
+                        b -> {
+                            int next = ThoriumFramePacer.nextTargetFps(ThoriumFramePacer.getTargetFps());
+                            ThoriumFramePacer.setTargetFps(next);
+                            ThoriumConfig.get().setInt(ThoriumConfig.KEY_FRAME_TARGET_FPS, next);
+                            ThoriumConfig.get().saveNow();
+                        },
+                        "Caps the client to a fixed framerate using the hybrid sleep-spin pacer. Uncapped lets the game run as fast as the hardware allows.",
+                        "⚡ Frame Cap"));
             }
 
             case PERFORMANCE -> {
@@ -250,15 +267,45 @@ public class ThoriumVideoSettingsScreen extends Screen {
 
                 addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
                         "Immediate HUD Batching",
-                        () -> ThoriumImmediateBatcher.isEnabled() ? "ON" : "OFF",
-                        SettingControlType.CHECKBOX,
-                        () -> ThoriumImmediateBatcher.isEnabled(),
-                        b -> ThoriumImmediateBatcher.setEnabled(!ThoriumImmediateBatcher.isEnabled()),
-                        "Batches consecutive 2D GUI elements into coherent vertex buffers, eliminating hundreds of individual state swaps per frame.",
+                        () -> "NOT WIRED",
+                        SettingControlType.ACTION,
+                        () -> false,
+                        b -> b.setTempStatus("NOT AVAILABLE"),
+                        "Not available yet: the batcher is flushed every frame, but nothing consults its merge decision, so this switch cannot change anything.",
                         "★ Fast UI Drawing"));
             }
 
             case ADVANCED -> {
+                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
+                        "Fast Math Overrides",
+                        () -> ThoriumCompatibility.isFastMathEnabled() ? "ON" : "OFF",
+                        SettingControlType.CHECKBOX,
+                        () -> ThoriumCompatibility.isFastMathEnabled(),
+                        b -> {
+                            boolean next = !ThoriumCompatibility.isFastMathEnabled();
+                            ThoriumCompatibility.setFastMathEnabled(next);
+                            ThoriumConfig.get().setBoolean(ThoriumConfig.KEY_FAST_MATH, next);
+                            ThoriumConfig.get().saveNow();
+                        },
+                        "Replaces Minecraft's sin/cos/invSqrt with a lookup table. Faster but less precise, so it is disabled automatically while a shader pack is loaded.",
+                        "⚡ Fast Math"));
+                currentY += rowH + rowGap;
+
+                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
+                        "Auto-Yield to Sodium",
+                        () -> ThoriumCompatibility.isAutoYieldEnabled() ? "ON" : "OFF",
+                        SettingControlType.CHECKBOX,
+                        () -> ThoriumCompatibility.isAutoYieldEnabled(),
+                        b -> {
+                            boolean next = !ThoriumCompatibility.isAutoYieldEnabled();
+                            ThoriumCompatibility.setAutoYieldEnabled(next);
+                            ThoriumConfig.get().setBoolean(ThoriumConfig.KEY_COMPAT_AUTO_YIELD, next);
+                            ThoriumConfig.get().saveNow();
+                        },
+                        "Disables Thorium's own culling when a competing renderer such as Sodium is installed, so the two never fight over visibility.",
+                        "⚡ Coexist With Sodium"));
+                currentY += rowH + rowGap;
+
                 addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
                         "Safe Mode (Disable Thorium)",
                         () -> ThoriumSafety.isSafeMode() ? "ON" : "OFF",
@@ -285,12 +332,12 @@ public class ThoriumVideoSettingsScreen extends Screen {
                 currentY += rowH + rowGap;
 
                 addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Multi-Threaded Particle Sim",
-                        () -> ThoriumParticleSimulator.isEnabled() ? "ON" : "OFF",
+                        "Particle Budget & Culling",
+                        () -> ThoriumParticleBudget.isEnabled() ? "ON" : "OFF",
                         SettingControlType.CHECKBOX,
-                        () -> ThoriumParticleSimulator.isEnabled(),
-                        b -> ThoriumParticleSimulator.setEnabled(!ThoriumParticleSimulator.isEnabled()),
-                        "Offloads particle updates and physics calculations from the main render thread to background worker threads.",
+                        () -> ThoriumParticleBudget.isEnabled(),
+                        b -> ThoriumParticleBudget.setEnabled(!ThoriumParticleBudget.isEnabled()),
+                        "Caps how many particles may be created per budget window and rejects particles that are off-screen, out of range or hidden behind blocks.",
                         "★ Particle Protection"));
                 currentY += rowH + rowGap;
 
@@ -339,9 +386,11 @@ public class ThoriumVideoSettingsScreen extends Screen {
                 ThoriumEntityLodThrottler.setEnabled(true);
                 ThoriumBvhCuller.setEnabled(true);
                 ThoriumSoundGovernor.setEnabled(true);
-                ThoriumParticleSimulator.setEnabled(true);
+                ThoriumParticleBudget.setEnabled(true);
                 ThoriumInputPacer.setEnabled(true);
                 ThoriumChunkUploadPacer.setEnabled(true);
+                ThoriumCompatibility.setFastMathEnabled(false);
+                ThoriumCompatibility.setFastMathEnabled(false);
             }
             case "BALANCED" -> {
                 AsyncOcclusionCuller.setExtremeFpsMode(false);
@@ -351,9 +400,11 @@ public class ThoriumVideoSettingsScreen extends Screen {
                 ThoriumEntityLodThrottler.setEnabled(true);
                 ThoriumBvhCuller.setEnabled(true);
                 ThoriumSoundGovernor.setEnabled(true);
-                ThoriumParticleSimulator.setEnabled(true);
+                ThoriumParticleBudget.setEnabled(true);
                 ThoriumInputPacer.setEnabled(true);
                 ThoriumChunkUploadPacer.setEnabled(true);
+                ThoriumCompatibility.setFastMathEnabled(false);
+                ThoriumCompatibility.setFastMathEnabled(false);
             }
             case "NUCLEAR" -> {
                 AsyncOcclusionCuller.setExtremeFpsMode(false);
@@ -363,10 +414,12 @@ public class ThoriumVideoSettingsScreen extends Screen {
                 ThoriumEntityLodThrottler.setEnabled(true);
                 ThoriumBvhCuller.setEnabled(true);
                 ThoriumSoundGovernor.setEnabled(true);
-                ThoriumParticleSimulator.setEnabled(true);
+                ThoriumParticleBudget.setEnabled(true);
                 ThoriumInputPacer.setEnabled(true);
                 ThoriumFramePacer.setEnabled(true);
                 ThoriumChunkUploadPacer.setEnabled(true);
+                ThoriumCompatibility.setFastMathEnabled(true);
+                ThoriumCompatibility.setFastMathEnabled(false);
             }
         }
         ThoriumConfig.get().setString(ThoriumConfig.KEY_PRESET, preset);

@@ -11,6 +11,7 @@
     "core.MinecraftThreadCaptureMixin",
     "core.TelemetrySuppressorMixin",
     "core.MinecraftFramerateUncapperMixin",
+    "core.MinecraftFrameBoundaryMixin",
     "core.ParticleEngineMixin",
     "core.SmartLeavesCullingMixin"${mixin_legacy}${mixin_modern}
   ]

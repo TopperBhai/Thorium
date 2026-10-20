@@ -6,22 +6,29 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import com.mojang.blaze3d.platform.Window;
+import com.mojang.blaze3d.systems.GpuSurface;
 import dev.hyperionfps.core.ThoriumSafety;
 import dev.hyperionfps.frame.FramePacing;
 
 /**
- * Modern 26.1 GLFW frame uncapper and VSync enforcer.
+ * Modern 26.2 frame uncapper and VSync enforcer.
+ *
+ * <p>26.2 dropped {@code Window#updateVsync(boolean)} - the present mode is now chosen
+ * when the GPU surface is configured. The hook therefore sits on
+ * {@link GpuSurface#configure(GpuSurface.Configuration)}, which is the point where the
+ * swap behaviour is actually applied.</p>
  */
-@Mixin(Window.class)
+@Mixin(GpuSurface.class)
 public abstract class ModernFramePacingMixin {
 
-    @Inject(method = "updateVsync", at = @At("TAIL"), require = 0)
-    private void hyperionfps$enforceUncappedVsync(boolean vsyncEnabled, CallbackInfo callbackInfo) {
+    @Inject(method = "configure", at = @At("TAIL"), require = 0)
+    private void hyperionfps$enforceUncappedVsync(GpuSurface.Configuration configuration, CallbackInfo callbackInfo) {
         if (ThoriumSafety.isSafeMode()) {
             return;
         }
-        if (!vsyncEnabled || FramePacing.inBootPhase()) {
+        boolean vsyncDisabled = configuration.presentMode() != GpuSurface.PresentMode.FIFO
+                && configuration.presentMode() != GpuSurface.PresentMode.FIFO_RELAXED;
+        if (FramePacing.inBootPhase() || vsyncDisabled) {
             if (applySwapIntervalZero()) {
                 FramePacing.reportUncapped("GLFW glfwSwapInterval(0)");
             } else {

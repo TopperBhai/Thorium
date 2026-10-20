@@ -227,6 +227,15 @@ public final class DefaultVersionBridge implements VersionBridge {
     // EntityBridge Implementation
     // ------------------------------------------------------------------------
 
+    /**
+     * Entity bridge backed by the real culling engines.
+     *
+     * <p>Earlier revisions returned {@code false} from every query, which made the
+     * bridge advertise capabilities it did not have. The queries now delegate to
+     * {@link dev.hyperionfps.culling.AsyncOcclusionCuller}, which is the component the
+     * mixins use as well - so a caller of the bridge and a caller of the mixin reach
+     * the same decision.</p>
+     */
     private static final class DefaultEntityBridge implements EntityBridge {
         private final AtomicBoolean cullingEnabled = new AtomicBoolean(true);
         private volatile double dynamicDistanceScaling = 1.0;
@@ -243,24 +252,26 @@ public final class DefaultVersionBridge implements VersionBridge {
 
         @Override
         public boolean shouldCullEntity(Object entity, double camX, double camY, double camZ) {
-            if (!cullingEnabled.get()) {
+            if (!cullingEnabled.get() || !(entity instanceof net.minecraft.world.entity.Entity typed)) {
                 return false;
             }
-            // Conservative fast fallback: allow rendering unless culler actively occludes
-            return false;
+            return dev.hyperionfps.culling.AsyncOcclusionCuller.shouldCullEntity(typed, camX, camY, camZ);
         }
 
         @Override
         public boolean shouldCullBlockEntity(Object blockEntity, double camX, double camY, double camZ) {
-            if (!cullingEnabled.get()) {
+            if (!cullingEnabled.get() || !(blockEntity instanceof net.minecraft.world.level.block.entity.BlockEntity typed)) {
                 return false;
             }
-            return false;
+            return dev.hyperionfps.culling.AsyncOcclusionCuller.shouldCullBlockEntity(typed, camX, camY, camZ);
         }
 
         @Override
         public boolean shouldCullParticle(double x, double y, double z) {
-            return false;
+            if (!cullingEnabled.get()) {
+                return false;
+            }
+            return dev.hyperionfps.culling.AsyncOcclusionCuller.shouldCullParticle(x, y, z);
         }
 
         @Override

@@ -35,7 +35,8 @@ class CullingEngineTest {
     void distantParticlesAreCulled() {
         AsyncOcclusionCuller.setEnabled(true);
         AsyncOcclusionCuller.setExtremeFpsMode(false);
-        AsyncOcclusionCuller.onFrameBegin(0, 0, 0, null, null);
+        dev.hyperionfps.particle.ThoriumParticleBudget.resetWindow();
+        dev.hyperionfps.frame.ThoriumFrameContext.beginWorldFrame(0, 0, 0, null, null);
 
         // Particle at distance > 32 blocks (e.g. 50 blocks away) must be culled
         assertTrue(AsyncOcclusionCuller.shouldCullParticle(50, 0, 0));

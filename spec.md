@@ -67,6 +67,8 @@ Format: `REQ-<AREA>-<n>` · **Must** = required for v0.2 · **Should** = desirab
 | REQ-FRAME-6 | Override vanilla's focus-loss 30 FPS cap, overridable via `-Dhyperionfps.throttle_on_focus_loss=true`. | Should |
 | REQ-FRAME-7 | Force VSync off during a 30 s boot window so the main menu renders at full speed. | Should |
 | REQ-FRAME-8 | Discard implausible frame deltas (≤ 0 ns or > 500 ms) from statistics. | Must |
+| REQ-FRAME-9 | The frame pacer must support a user-set target FPS (uncapped / 30 / 60 / 120 / 144 / 240), persisted across restarts. | Must |
+| REQ-FRAME-10 | The camera context and every per-frame governor must be published **exactly once per rendered frame** — never once per entity. | Must |
 
 ### 2.2 Culling & visibility
 
@@ -121,7 +123,7 @@ Format: `REQ-<AREA>-<n>` · **Must** = required for v0.2 · **Should** = desirab
 | ID | Requirement | Priority |
 | :--- | :--- | :--- |
 | REQ-UI-1 | Provide a frosted-glass HUD showing FPS, frametime, average, max spike, hitch count, smoothness % and RAM usage. | Must |
-| REQ-UI-2 | Provide a video settings console with **100 % interactive controls — zero fake toggles**. | Must |
+| REQ-UI-2 | Provide a video settings console whose controls are **honest**: a control that cannot change anything on the running version must be shown as *not available* / *not wired*, never as a working switch. | Must |
 | REQ-UI-3 | Provide three hardware presets: **Potato**, **Balanced** (default), **Nuclear Max**. | Must |
 | REQ-UI-4 | Bind a toggle to the HUD, a toggle to Extreme FPS mode, and a key to open the settings console. | Must |
 | REQ-UI-5 | Expose the settings console from the standard Video Settings screen as well as its own hotkey. | Should |
@@ -143,6 +145,10 @@ Format: `REQ-<AREA>-<n>` · **Must** = required for v0.2 · **Should** = desirab
 | REQ-PLAT-8 | Persist all user-facing settings to disk so presets and toggles survive a restart. | Must |
 | REQ-PLAT-9 | Never let an optimisation failure prevent the game from starting: every pre-launch and startup step is individually guarded. | Must |
 | REQ-PLAT-10 | Never call a native graphics function without a current context; guard it so it cannot abort the process on unusual GL stacks. | Must |
+| REQ-COMP-1 | Thorium must detect competing renderers (Sodium/Embeddium family) and yield the overlapping subsystems automatically. | Must |
+| REQ-COMP-2 | Shader-pack presence must disable the fast-math overrides. | Must |
+| REQ-DIAG-1 | The startup log must report the **actual** live state of every subsystem, distinguishing ACTIVE / IDLE / DISABLED / UNWIRED / UNSUPPORTED. | Must |
+| REQ-DIAG-2 | Every mixin target must be verified to exist at build time; a missing target fails the build. | Must |
 
 ### 2.8 Quality
 
@@ -184,20 +190,20 @@ code. Mixins call *into* policy engines; policy engines never call mixins.
 
 | Package | Key classes | Responsibility |
 | :--- | :--- | :--- |
-| `core` | `RenderThreads`, `ThreadGovernor`, `TelemetryGate` | Client-thread capture, priority elevation, telemetry kill-switch |
-| `frame` | `ThoriumFrametimeTracker`, `ThoriumFramePacer`, `FramePacing` | Frametime history, stutter detection, sleep→spin pacing, boot-window VSync policy |
+| `core` | `RenderThreads`, `ThreadGovernor`, `TelemetryGate`, `ThoriumSafety`, `ThoriumCompatibility`, `ThoriumSubsystemReport` | Client-thread capture, priority elevation, telemetry kill-switch, mod-compatibility probe, subsystem status report |
+| `frame` | `ThoriumFrametimeTracker`, `ThoriumFramePacer`, `FramePacing`, `ThoriumFrameContext` | Frametime history, sleep→spin pacing, boot-window VSync policy, authoritative per-frame context |
 | `culling` | `AsyncOcclusionCuller`, `SectionCullingEngine`, `OcclusionGrid`, `OcclusionRaycaster`, `ThoriumBvhCuller`, `FrustumCache` | Visibility decisions for sections, entities, block entities, particles |
 | `memory` | `DirectBufferPool`, `OffHeap`, `IdleJanitor`, `ThoriumMemoryOptimizer`, `pool/*` | Zero-allocation pools, native memory return, idle sweeping, heap defence |
 | `chunk` | `ThoriumChunkUploadPacer` | Dual-budget chunk mesh upload scheduling |
 | `anim` | `ThoriumEntityLodThrottler` | Distance-based animation LOD |
 | `audio` | `ThoriumSoundGovernor` | Spatial sound rate limiting |
 | `texture` | `ThoriumTextureThrottler` | Animated-texture upload throttling |
-| `particle` | `ThoriumParticleSimulator`, `ParticleBatchEngine`, `ParticleBatchPool`, `ParticleQuad` | Particle ticking and sheet batching |
+| `particle` | `ThoriumParticleBudget`, `ParticleBatchEngine`, `ParticleBatchPool`, `ParticleQuad` | Particle creation budget, sheet batching |
+| `adaptive` | `AdaptiveDistanceController`, `RenderDistanceGovernor` | EMA-driven render-distance governor and its binding to the game option |
 | `instancing` | `EntityInstancer`, `EntityGroupManager`, `EntityGroup`, `EntityInstanceData` | GPU entity instancing |
 | `lighting` | `AsyncLightEngine` | Async light update queue + worker |
 | `batch` | `ThoriumImmediateBatcher` | Immediate-mode 2D draw batching policy |
 | `render` | `HudBatcher`, `GlStateTracker` | HUD draw merging, redundant GL state filtering |
-| `adaptive` | `AdaptiveDistanceController` | EMA-driven render-distance governor |
 | `env` | `LauncherEnvironment` | Launcher/GC/heap evidence probe |
 | `gui` | `ThoriumGuiManager` + per-version screens | HUD state, Extreme FPS toggle, telemetry summary |
 | `version` | `VersionBridge`, `DefaultVersionBridge`, `GameVersion`, `Era`, `GameVersionDetector`, `VersionBridgeRegistry` | Version abstraction and detection |
@@ -266,14 +272,23 @@ Presets are applied from the video settings screen (per-version `ThoriumVideoSet
 ```
 1. Minecraft thread capture (once, at construction)
 2. FramePacing boot-window check ── VSync override if uptime < 30 s
-3. ThoriumFramePacer.paceFrame()  ── park to deadline−1.2 ms, then spin
-4. AsyncOcclusionCuller.onFrameBegin(camera) ── dynamic distance scale update
-5. Culling decisions  ── sections / entities / block entities / particles
+3. ThoriumFrameContext.beginClientFrame() ── Minecraft#runTick hook (exactly once per
+   client frame): frametime sample + ThoriumFramePacer.paceFrame()
+4. ThoriumFrameContext.beginWorldFrame(camera, frustum, level) ── LevelRenderer hook
+   (exactly once per rendered world frame): camera context, dynamic distance scale,
+   BVH cache flush, adaptive-distance EMA, entity LOD
+5. Culling decisions  ── entities / block entities / particles
 6. ThoriumChunkUploadPacer.runBudgetedUploads(queue) ── ≤2.5 ms AND ≤8 sections
 7. Particle + entity batching ── flush sheets / instance groups
 8. HUD batching + GL state filtering
 9. ThoriumFrametimeTracker.recordFrame() ── update stutter statistics
 ```
+
+> **The frame boundary is authoritative.** Everything that must happen once per frame
+> hangs off `ThoriumFrameContext`. Before it existed, the modern entity-culling hook
+> published the camera context *once per entity*, which flushed the BVH cache, stepped
+> the dynamic distance scale and fed the adaptive-distance EMA hundreds of times per
+> frame.
 
 ### 4.4 Hotkeys
 
@@ -310,6 +325,9 @@ not silently drop settings.
 | `culling.bvh.enabled` | BVH cluster culling | `true` |
 | `anim.entityLod.enabled` | Entity animation LOD | `true` |
 | `frame.pacer.enabled` | Zero-jitter frame pacer | `true` |
+| `frame.pacer.targetFps` | Frame cap for the pacer; `0` = uncapped | `0` |
+| `compat.autoYield` | Stand down the culling for a competing renderer | `true` |
+| `math.fast.enabled` | Fast-math overrides of `Mth` (off under a shader pack) | `false` |
 | `input.pacer.enabled` | Reflex-style input pacing | `true` |
 | `chunk.uploader.enabled` | Budgeted chunk upload pacer | `true` |
 | `texture.throttler.enabled` | Animated-texture throttling | `true` |
@@ -317,7 +335,8 @@ not silently drop settings.
 | `batch.immediate.enabled` | Immediate-mode 2D batching | `true` |
 | `batch.hud.enabled` | HUD draw-call merging | `true` |
 | `audio.governor.enabled` | Spatial sound governor | `true` |
-| `particle.simulator.enabled` | Particle simulator | `true` |
+| `particle.simulator.enabled` | *removed* — replaced by `particle.budget.enabled` | — |
+| `particle.budget.enabled` | Particle creation budget and culling | `true` |
 | `particle.batcher.enabled` | Particle sheet batching | `true` |
 | `entity.instancer.enabled` | GPU entity instancing | `true` |
 | `lighting.async.enabled` | Async light engine | `true` |
@@ -413,8 +432,10 @@ A release is valid only when:
    `${java_version}`).
 4. The mixin router log line shows the expected `eligible`/`skipped`/`applied` counts for
    the running version.
-5. `README.md` and `MODRINTH.md` list the correct version matrix and hotkeys.
-6. `state.md` reflects the shipped state.
+5. The mixin target audit (`MixinTargetAuditTest`) passes on all five nodes — a dead
+   target fails the build instead of the runtime.
+6. `README.md` and `MODRINTH.md` list the correct version matrix and hotkeys.
+7. `state.md` reflects the shipped state.
 
 ---
 

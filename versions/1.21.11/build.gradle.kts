@@ -28,6 +28,13 @@ dependencies {
 
 tasks.named<Test>("test") {
     useJUnitPlatform()
+    // The mixin target audit needs the Minecraft class files at test runtime. Loom puts
+    // them on the compile classpath but not on the test runtime classpath, so the path is
+    // handed to the test explicitly (see MixinTargetAuditTest).
+    doFirst {
+        systemProperty("thorium.compileClasspath",
+                configurations.getByName("compileClasspath").asPath)
+    }
 }
 
 java {
@@ -51,7 +58,7 @@ val templateValues = mapOf(
     "description" to property("mod.description").toString(),
     "minecraft" to (project.findProperty("mod.mc_range") ?: minecraftVersion).toString(),
     "java_version" to "21",
-    "mixin_legacy" to ",\n    \"legacy.LegacyMthMixin\",\n    \"legacy.LegacyOptionsScreenMixin\",\n    \"legacy.LegacyPauseScreenMixin\",\n    \"legacy.LegacyTitleScreenMixin\",\n    \"legacy.LegacyFramePacingMixin\",\n    \"legacy.LegacyEntityCullingMixin\",\n    \"legacy.LegacyBlockEntityCullingMixin\",\n    \"legacy.LegacyWeatherMixin\",\n    \"legacy.LegacyKeyboardMixin\",\n    \"legacy.LegacyHudBatchingMixin\",\n    \"legacy.LegacyShadowMixin\",\n    \"legacy.LegacyChunkUploadBudgetMixin\",\n    \"legacy.LegacyCloudsMixin\",\n    \"legacy.LegacyEntityLodMixin\",\n    \"legacy.LegacySoundEngineMixin\",\n    \"legacy.LegacyTextureAnimationMixin\"",
+    "mixin_legacy" to ",\n    \"legacy.LegacyMthMixin\",\n    \"legacy.LegacyOptionsScreenMixin\",\n    \"legacy.LegacyPauseScreenMixin\",\n    \"legacy.LegacyTitleScreenMixin\",\n    \"legacy.LegacyLevelRendererFrameMixin\",\n    \"legacy.LegacyFramePacingMixin\",\n    \"legacy.LegacyEntityCullingMixin\",\n    \"legacy.LegacyBlockEntityCullingMixin\",\n    \"legacy.LegacyFogMixin\",\n    \"legacy.LegacyWeatherMixin\",\n    \"legacy.LegacyKeyboardMixin\",\n    \"legacy.LegacyHudBatchingMixin\",\n    \"legacy.LegacyShadowMixin\",\n    \"legacy.LegacyChunkUploadBudgetMixin\",\n    \"legacy.LegacyCloudsMixin\",\n    \"legacy.LegacyEntityLodMixin\",\n    \"legacy.LegacySoundEngineMixin\",\n    \"legacy.LegacyTextureAnimationMixin\"",
     "mixin_modern" to ""
 )
 

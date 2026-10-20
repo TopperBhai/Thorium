@@ -14,7 +14,7 @@ class SectionCullingEngineTest {
     void setUp() {
         SectionCullingEngine.setEnabled(true);
         SectionCullingEngine.resetMetrics();
-        AsyncOcclusionCuller.onFrameBegin(0, 64, 0, null, null);
+        dev.hyperionfps.frame.ThoriumFrameContext.beginWorldFrame(0, 64, 0, null, null);
     }
 
     @Test

@@ -5,7 +5,9 @@ import org.slf4j.LoggerFactory;
 
 import dev.hyperionfps.config.ThoriumConfig;
 import dev.hyperionfps.core.RenderThreads;
+import dev.hyperionfps.core.ThoriumCompatibility;
 import dev.hyperionfps.core.ThoriumSafety;
+import dev.hyperionfps.core.ThoriumSubsystemReport;
 import dev.hyperionfps.culling.AsyncOcclusionCuller;
 import dev.hyperionfps.mixin.HyperionMixinPlugin;
 import dev.hyperionfps.version.VersionBridge;
@@ -50,9 +52,25 @@ public final class HyperionFPS implements ClientModInitializer {
         AsyncOcclusionCuller.init();
         LOGGER.info("Async Occlusion Culling Engine online: daemon thread running");
 
+        // Probe the mods that Thorium has to coexist with (shader packs, competing
+        // renderers) before anything else can be switched on.
+        try {
+            ThoriumCompatibility.detect(ThoriumConfig.get().getBoolean(ThoriumConfig.KEY_COMPAT_AUTO_YIELD, true));
+            ThoriumCompatibility.applyYieldToCompetingRenderer();
+        } catch (Throwable failure) {
+            LOGGER.warn("Compatibility probe failed: {}", failure.toString());
+        }
+
+        // Connect the adaptive render-distance governor to the game's own option. The
+        // governor yields whenever the player changes the distance by hand.
+        try {
+            dev.hyperionfps.adaptive.RenderDistanceGovernor.install();
+        } catch (Throwable failure) {
+            LOGGER.warn("Adaptive render distance governor could not be attached: {}", failure.toString());
+        }
+
         // Initialize Beyond-Sodium Async Light Engine
         dev.hyperionfps.lighting.AsyncLightEngine.getInstance().init();
-        LOGGER.info("Async Light Propagation Engine online: daemon worker active");
 
         // Initialize Advanced Fabric API subsystems if available
         boolean fabricHooksLoaded = false;
@@ -63,17 +81,9 @@ public final class HyperionFPS implements ClientModInitializer {
         } catch (Throwable ignored) {
             LOGGER.debug("Fabric API advanced hooks not loaded (standalone mode)");
         }
+        LOGGER.info("Fabric API hooks: {}", fabricHooksLoaded ? "integrated" : "standalone");
 
-        LOGGER.info("Subsystem states: {}", String.join(", ",
-                "threads=" + (RenderThreads.isCaptured() ? "captured" : "pending"),
-                "culling=active (sections+entities)",
-                "fastmath=enabled",
-                "instancing=ready",
-                "particle-batching=ready",
-                "adaptive-distance=ready",
-                "async-lighting=active",
-                "fabric-api=" + (fabricHooksLoaded ? "integrated" : "standalone"),
-                "version-bridge=active"));
+        LOGGER.info("Subsystem states:\n{}", ThoriumSubsystemReport.format());
     }
 
     /** Process-wide version/capability bridge. */

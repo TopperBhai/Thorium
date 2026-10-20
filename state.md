@@ -2,8 +2,8 @@
 
 **Project:** Thorium (`thorium` / Th-90) — Minecraft client-side optimization mod
 **Repo:** `https://github.com/TopperBhai/Thorium` · **Local:** `F:\Toperion Optimization`
-**Branch:** `main` · **HEAD:** `3782c32` · **Working tree:** clean
-**Mod version:** 0.1.1 · **Last verified:** 2026-10-20
+**Branch:** `main` · **HEAD:** `948ec68` (+ uncommitted v0.2 groundwork) · **Working tree:** modified
+**Mod version:** 0.1.1 · **Last verified:** 2026-10-21
 
 > This document is the **status board**. It records what is built, what is verified, what
 > is broken or missing, and what to do next. Requirements → [`spec.md`](./spec.md).
@@ -17,54 +17,55 @@
 | :--- | :--- | :--- |
 | Core subsystems | 🟢 Complete | All 18 packages implemented with metrics and toggles |
 | Multi-version build | 🟢 Complete | 5 nodes, shared source tree, era-routed mixins |
-| Unit tests | 🟢 Green | 97 tests / 24 classes, 0 failures |
+| Unit tests | 🟢 Green | 117 tests / 28 classes, 0 failures on all five nodes |
 | Build | 🟢 Green | `buildAll` produces 5 jars |
+| Mixin target audit | 🟢 Fixed | A dead mixin target now **fails the build** (G-12) |
+| Frame context | 🟢 Fixed | One authoritative per-frame publisher on all five nodes (A-3) |
+| Frame pacer | 🟢 Fixed | `ThoriumFramePacer.paceFrame()` is wired to `Minecraft#runTick` (A-1) |
+| Adaptive render distance | 🟢 Fixed | Wired to the game's own render-distance option (A-2) |
+| Particle ticking | 🟢 Resolved | The broken re-implementation of vanilla's tick loop is gone (G-2/G-3) |
+| Frame pacing on 26.2 | 🟢 Fixed | `Window#updateVsync` never existed on 26.2 — re-targeted (new) |
 | Settings persistence | 🟢 Fixed | `ThoriumConfig` writes `thorium-config.json` atomically; presets and toggles survive a restart (was G-1) |
 | 1.21.1 hotkey parity | 🟢 Fixed | 1.21.1 now handles F6 / F7 / F8 via the GLFW key API (was G-5) |
 | Android launch crash | 🟡 Mitigated | Native SIGSEGV in `libbinder_ndk.so`; safe-mode kill switch + native-call guards added (see §4.1) |
-| Particle ticking injection | 🔴 Broken | `tickParticleList` target exists on **1.21.1 only** — dead on 4/5 versions (G-2) |
-| Fabric API hooks parity | 🟡 Partial | `ThoriumFabricHooks` exists only in 1.21.1 (G-9) |
-| Documentation | 🟡 Partial | `README.md` / `MODRINTH.md` still stale vs. code (G-6) |
+| Mod coexistence | 🟢 Fixed | Sodium/Embeddium and shader packs are detected; Thorium stands down (D-1/D-2) |
+| Startup log honesty | 🟢 Fixed | A live subsystem report replaces the hardcoded claims (A-13/D-4) |
+| Dead subsystems | 🔴 Open | 7 implemented subsystems still have **no call site** — see §4.2 |
 | Performance validation | 🟡 Unverified | No in-game benchmark harness or capture tooling (G-7) |
 | Release tagging | 🔴 Missing | No git tags for 0.1.1 (G-11) |
 
-**Overall:** Builds and tests green across all five version nodes, and the core
-subsystems are complete. Three of the reported problems are now fixed: **settings
-persist across restarts**, **1.21.1 has full hotkey parity**, and **an Android launch
-crash now has a one-flag escape hatch**. The remaining headline defect is that the
-particle ticking optimisation is silently inert on 4 of 5 versions (G-2).
+**Overall:** Builds and tests green across all five version nodes. The two headline
+defects of the previous cycle — the particle ticking injection that was dead on four
+of five versions, and the frame context that was published once per *entity* — are
+fixed, and a build-time audit now makes the first class of bug impossible to ship
+again. What remains is a documented list of subsystems that are implemented and tested
+but not yet connected to the game (see §4.2), plus the missing benchmark harness.
 
 ---
 
-## 2. Build & test baseline (verified 2026-10-20)
+## 2. Build & test baseline (verified 2026-10-21)
 
 | Command | Result |
 | :--- | :--- |
 | `./gradlew :26.3:compileJava` | ✅ `EXIT=0` |
-| `./gradlew :26.3:test` | ✅ `BUILD SUCCESSFUL` — 97 tests, 0 failures, 0 errors, 0 skipped |
-| `./gradlew test` | ✅ green on **all five** nodes |
+| `./gradlew :26.3:test` | ✅ `BUILD SUCCESSFUL` — 117 tests, 0 failures, 0 errors, 0 skipped |
+| `./gradlew test` | ✅ green on **all five** nodes (117 tests each) |
 | `./gradlew buildAll` | ✅ `BUILD SUCCESSFUL` — 5 jars in `build/dist/` |
 
 Verified artifacts in `build/dist/`:
 
 | Jar | Size |
 | :--- | ---: |
-| `thorium-0.1.1+1.21.1.jar` | 171 861 B |
-| `thorium-0.1.1+1.21.11.jar` | 167 041 B |
-| `thorium-0.1.1+26.1.jar` | 166 247 B |
-| `thorium-0.1.1+26.2.jar` | 166 314 B |
-| `thorium-0.1.1+26.3.jar` | 166 562 B |
+| `thorium-0.1.1+1.21.1.jar` | 198 943 B |
+| `thorium-0.1.1+1.21.11.jar` | 195 770 B |
+| `thorium-0.1.1+26.1.jar` | 194 027 B |
+| `thorium-0.1.1+26.2.jar` | 194 245 B |
+| `thorium-0.1.1+26.3.jar` | 194 191 B |
 
-### Build warnings observed (both are silent defects, not noise)
+### Build warnings observed
 
-```
-:1.21.11:remapJar
-  Cannot remap tickParticleList because it does not exist in any of the targets
-  [net/minecraft/client/particle/ParticleEngine]
-```
-
-The 26.x nodes do **not** print this — they use the plain (non-remapping) Loom flavor,
-so the same broken target fails **completely silently** at runtime. See G-2.
+The `Cannot remap tickParticleList because it does not exist in any of the targets`
+warning is **gone** — the dead injection was removed (G-2). The remap nodes are clean.
 
 Expected deprecation warning during tests (not a failure):
 `sun.misc.Unsafe::invokeCleaner has been called by dev.hyperionfps.memory.OffHeap`.
@@ -78,14 +79,11 @@ task** — only `:1.21.1` and `:1.21.11` do. Use `assemble` / `build` for the mo
 
 | Metric | Count |
 | :--- | ---: |
-| Shared main sources (`src/main/java`) | 60 files (+`config/ThoriumConfig.java`, `core/ThoriumSafety.java`) |
-| Shared test sources (`src/test/java`) | 24 classes / 97 tests |
-| Version-specific sources | 18 files/node (26.x), 21 (1.21.1) |
+| Shared main sources (`src/main/java`) | 64 files |
+| Shared test sources (`src/test/java`) | 28 classes / 117 tests |
+| Version-specific sources | 19 files/node (26.x), 21 (1.21.1), 20 (1.21.11) |
 | Version nodes | 5 |
-| Git commits | 6 |
-
----
-
+| Git commits | 6 (this cycle's work is uncommitted) |
 ## 3. Subsystem inventory
 
 | Package | State | Tests | Notes |
@@ -99,7 +97,7 @@ task** — only `:1.21.1` and `:1.21.11` do. Use `assemble` / `build` for the mo
 | `audio` | ✅ | *(via `BeyondSodiumFeaturesTest`)* | Spatial sound rate limit |
 | `input` | ✅ | *(via `BeyondSodiumFeaturesTest`)* | Telemetry-only counter; **no real pacing logic** |
 | `texture` | ✅ | `ThoriumTextureThrottlerTest` | Animated-texture throttling |
-| `particle` | ⚠️ | `ParticleBatchingTest` | 5-sheet batcher OK; **ticking injection dead on 4/5 versions (G-2)**; simulator sequential (G-3) |
+| `particle` | ✅ | `ParticleBatchingTest`, `BeyondSodiumFeaturesTest` | Creation budget + culling live on all 5 nodes; sheet batching still unwired (§4.2) |
 | `instancing` | ✅ | `EntityInstancingTest` | GPU instance batches |
 | `lighting` | ✅ | `AsyncLightEngineTest` | Async light queue + daemon worker |
 | `batch` | ✅ | `ThoriumImmediateBatcherTest` | Immediate-mode 2D batching |
@@ -108,7 +106,7 @@ task** — only `:1.21.1` and `:1.21.11` do. Use `assemble` / `build` for the mo
 | `env` | ✅ | *(none)* | Launcher/GC probe — read-only, low risk |
 | `gui` | ✅ | *(none)* | `ThoriumGuiManager` + per-version screens |
 | `version` | ✅ | `VersionBridgeTest`, `GameVersionTest` | Bridge, detection, era routing |
-| `mixin` | ✅ | `HyperionMixinPluginTest` | Era router: 5 core + 19 legacy + 16 modern mixins |
+| `mixin` | ✅ | `HyperionMixinPluginTest`, `MixinTargetAuditTest` | Era router: 6 core + 19-21 legacy + 17 modern mixins; every target audited at build time |
 
 ---
 
@@ -212,91 +210,71 @@ headline feature — reverted to defaults on every restart.
 
 ---
 
-### G-2 🔴 Particle ticking injection is dead on 4 of 5 versions
+### G-2 ✅ RESOLVED — The dead particle ticking injection is gone
 
-**Finding (verified at bytecode level).** `ParticleEngineMixin` injects into
-`tickParticleList`:
+**Was:** `ParticleEngineMixin` injected into `tickParticleList`, a method that only
+exists on 1.21.1. On 1.21.11 and the three 26.x nodes the injection was a silent
+no-op, so `ThoriumParticleSimulator.tickParticles(...)` never ran — and on the one
+node where it *did* run, it was **actively harmful**.
+
+**The bug that was hiding behind it.** Vanilla's tick loop does three things:
 
 ```java
-@Inject(method = "tickParticleList", at = @At("HEAD"), cancellable = true, require = 0)
-private void thorium$tickParticleListConcurrently(Collection<Particle> particles, CallbackInfo ci) {
-    dev.hyperionfps.particle.ThoriumParticleSimulator.tickParticles(particles);
-    ci.cancel();
+this.tickParticle(particle);                                     // crash-report wrapped
+if (!particle.isAlive()) {
+    particle.getParticleLimit().ifPresent(l -> this.engine.updateCount(l, -1));
+    iterator.remove();
 }
 ```
 
-`javap -p` on the actual Minecraft jars for every node:
+`ThoriumParticleSimulator` did the first and the last, but **not** the second. The
+per-limit counters therefore only ever grew, and `hasSpaceInParticleLimit()` compares
+them against the limit — so after enough particles had died, the engine stopped
+creating particles of that type entirely, for the rest of the session.
 
-| Minecraft | `createParticle` | `tickParticleList` | Injection applies? |
-| :--- | :--- | :--- | :--- |
-| 1.21.1 | ✅ | ✅ `private void tickParticleList(Collection<Particle>)` | **yes** |
-| 1.21.11 | ✅ | ❌ **removed** (refactored to the `ParticleGroup` API) | **no** |
-| 26.1 | ✅ | ❌ **removed** | **no** |
-| 26.2 | ✅ | ❌ **removed** | **no** |
-| 26.3 | ✅ | ❌ **removed** | **no** |
+**Now fixed.**
 
-Minecraft replaced the flat `tickParticleList(Collection<Particle>)` method with a
-`ParticleGroup<?>`-based system (`createParticleGroup(ParticleRenderType)`,
-`ParticleLimit`) in 1.21.11 and kept it that way through 26.3.
+* The dead injection was removed from the core mixin. The particle **culling** hook
+  (`createParticle`) stays and is live on all five nodes.
+* `ThoriumParticleSimulator` was deleted. It never used the `ForkJoinPool` it created,
+  it did the same work as vanilla, and it broke vanilla's bookkeeping.
+* It is replaced by `ThoriumParticleBudget` — an honest, live feature: it caps how
+  many particles may be **created** per budget window (1500, or 64 in Extreme FPS
+  mode) and counts the rejections.
+* The console row is now *"Particle Budget & Culling"* instead of the false
+  *"Multi-Threaded Particle Sim"*.
 
-Because the injection uses `require = 0`, it fails **silently**. The only signal is the
-`:1.21.11:remapJar` warning quoted in §2 — and the 26.x nodes print nothing at all.
-
-**Impact.** High.
-* `ThoriumParticleSimulator.tickParticles(...)` is never invoked on 1.21.11, 26.1, 26.2
-  and 26.3 — particles are ticked by vanilla there.
-* The **valuable half still works**: the separate `createParticle` injection (distance +
-  occlusion particle culling) applies on all 5 versions, because `createParticle` still
-  exists everywhere.
-* The "Beyond-Sodium" particle optimisation claim in the README is overstated for
-  modern versions.
-
-**Fix direction.** Target the new API. Two options:
-* **(a) Move the injection to the `ParticleGroup` API** — inject into `ParticleEngine.tick()`
-  or the group tick path, iterate the groups' particle collections, and hand them to
-  `ThoriumParticleSimulator`. This requires per-version mixins because the group
-  internals differ between 1.21.11 and 26.x.
-* **(b) Scope the injection to the legacy era only** — move it out of `core/` into
-  `legacy/`, so the dead target is never attempted, and add a modern-era equivalent.
-
-Option (a) is the real fix. Whichever is chosen, **add a build-time assertion** so a
-missing mixin target fails the build instead of vanishing — see G-12.
+**Verification.** The mixin target audit (G-12) is green on all five nodes and the
+`Cannot remap tickParticleList` build warning is gone.
 
 ---
 
-### G-3 🟡 `ThoriumParticleSimulator` never uses its thread pool
+### G-3 ✅ RESOLVED — The particle simulator's naming/pool mismatch
 
-**Finding.** `ThoriumParticleSimulator` constructs a `ForkJoinPool` (`SIMULATION_POOL`,
-line 21) but `tickParticles(Collection<Particle>)` (line 34) is a plain sequential loop
-using `it.remove()`. The pool is never submitted to.
-
-**Impact.** Low functionally (the code is correct, just single-threaded), but the class
-name, the javadoc, and the mixin method name
-(`thorium$tickParticleListConcurrently`) all promise concurrency that does not exist.
-This is a **trust problem in the source**, not a performance bug — and it is inherited
-from the 1.21.1-era design that G-2 has now orphaned on 4 versions.
-
-**Fix direction.** Either (a) implement genuine parallel ticking with the pool and a
-correct concurrent removal strategy, or (b) rename the class/method to match reality and
-delete the unused pool. Option (b) is cheaper and honest; option (a) is the larger win
-on particle-heavy scenes — but only meaningful once G-2 is fixed.
+Resolved together with G-2: the class, its unused `ForkJoinPool` and the misleading
+`thorium$tickParticleListConcurrently` hook name are gone. Particle *ticking* is
+vanilla's job on every version; Thorium decides which particles are allowed to exist
+in the first place.
 
 ---
 
-### G-4 🟡 `FrustumCache.isVisible(double...)` allocates per call
+### G-4 🟡 `FrustumCache.isVisible(double...)` still allocates (mostly mitigated)
 
 **Finding.** `FrustumCache.isVisible(minX, minY, minZ, maxX, maxY, maxZ)` constructs
-`new AABB(...)` on line 42. The class javadoc claims zero-allocation behaviour.
+`new AABB(...)` on every call.
 
-**Impact.** Low-moderate. This overload is invoked per block entity, adding GC pressure
-on exactly the thread the project exists to protect — directly contradicting NFR-1.
+**What was done.** The block-entity culling path now performs the **distance test
+first**, so only block entities that survive the distance cut-off (48 blocks, 16 in
+Extreme mode) reach the frustum test and allocate. That removes the overwhelming
+majority of the per-frame allocations.
 
-**Fix direction.** Replace the `AABB`-based call with a primitive-frustum test
-(plane-by-plane against the cached `Frustum`'s six planes), or keep a single reusable
-mutable `AABB` instance and mutate it before the test.
+**What is still open.** Minecraft's `AABB` is immutable in every supported version
+(`public final double minX` plus copy-on-write setters), so a reusable instance is
+not possible. The remaining allocations need either a primitive plane test — which
+requires access to `Frustum`'s private planes — or an era-specific accessor mixin.
+Tracked as PLAN D-6.
 
 ---
-
 ### G-5 ✅ RESOLVED — 1.21.1 hotkey parity
 
 **Was:** `versions/1.21.1/.../legacy/LegacyKeyboardMixin.java` handled **only**
@@ -323,22 +301,21 @@ unreachable — only undiscoverable.
 
 ---
 
-### G-6 🟡 Documentation drift
+### G-6 ✅ RESOLVED — Documentation drift
 
-| Claim | Code reality |
-| :--- | :--- |
-| `README.md`: "117-sample live history graph" | `ThoriumFrametimeTracker.SAMPLE_COUNT = 128` |
-| GUI text: "126-sample micro-stutter graph" | Same — 128 |
-| `README.md` / `MODRINTH.md`: 4 versions (1.21.1, 26.1, 26.2, 26.3) | 5 nodes — **1.21.11 is missing** from both docs |
-| `README.md`: F6/F7/F8 on all versions | 1.21.1 only has `Shift+F10` (G-5) |
-| `README.md` benchmark table (320+ FPS, 7.4 ms 1 % low, <28 MB/s) | **No benchmark harness in the repo.** These numbers are unverifiable as written. |
-| `MODRINTH.md`: "Supported: 1.21.1, 26.1, 26.2, 26.3" | Missing 1.21.11 |
+| Claim | Code reality | Now |
+| :--- | :--- | :--- |
+| `README.md`: "117-sample live history graph" | `ThoriumFrametimeTracker.SAMPLE_COUNT = 128` | ✅ corrected to 128 |
+| `README.md` / `MODRINTH.md`: 4 versions | 5 nodes — 1.21.11 was missing | ✅ 1.21.11 listed |
+| `README.md`: F6/F7/F8 on all versions | 1.21.1 only had `Shift+F10` (G-5) | ✅ true since G-5 |
+| `README.md` benchmark table (320+ FPS, 7.4 ms 1 % low, <28 MB/s) | No benchmark harness in the repo | ✅ **removed** — the table now says *"measure it"* and explains how |
+| `MODRINTH.md`: "Supported: 1.21.1, 26.1, 26.2, 26.3" | Missing 1.21.11 | ✅ corrected |
 
-**Fix direction.** Correct the sample count to 128, add 1.21.11 to both docs, and either
-soften the benchmark table to "reported by users" or add the methodology used.
+**Also added.** A per-version feature matrix in `README.md` that states, for every
+feature, which versions support it — and the startup log now prints the same
+information for the running session (see A-13 / D-4).
 
 ---
-
 ### G-7 🟡 No performance measurement tooling
 
 **Finding.** There is no benchmark harness, frametime capture script, comparison
@@ -407,21 +384,17 @@ hook and the `fabric-api=integrated` claim entirely.
 
 ---
 
-### G-10 🟢 `DefaultVersionBridge.DefaultEntityBridge` culling is a no-op
+### G-10 ✅ RESOLVED — `DefaultVersionBridge.DefaultEntityBridge` was a no-op
 
-**Finding.** `DefaultEntityBridge.shouldCullEntity(...)`, `shouldCullBlockEntity(...)`
-and `shouldCullParticle(...)` **always return `false`**. The real culling decisions live
-in `AsyncOcclusionCuller` / `SectionCullingEngine` and are reached via mixins, not via
-the bridge.
+**Was.** `DefaultEntityBridge.shouldCullEntity(...)`, `shouldCullBlockEntity(...)` and
+`shouldCullParticle(...)` **always returned `false`**. The bridge advertised
+capabilities it did not have, which misleads the next contributor.
 
-**Impact.** Low — the bridge is a facade and the real path works. But the bridge
-advertises capabilities it does not implement, which will mislead the next contributor.
-
-**Fix direction.** Either delegate the bridge methods to the real engines, or document
-them explicitly as conservative no-ops for version-agnostic callers.
+**Now.** All three delegate to `AsyncOcclusionCuller`, which is the component the
+mixins use as well — so a caller of the bridge and a caller of the mixin reach the
+same decision.
 
 ---
-
 ### G-11 🟢 No release tags
 
 `git tag` is empty. Version 0.1.1 is recorded only in `gradle.properties`.
@@ -430,33 +403,41 @@ them explicitly as conservative no-ops for version-agnostic callers.
 
 ---
 
-### G-12 🟢 No build-time guard against dead mixin targets
+### G-12 ✅ RESOLVED — The build-time guard against dead mixin targets
 
-**Finding.** This is the *root cause* that let G-2 ship undetected.
+**Was.** This was the *root cause* that let G-2 ship undetected.
 
 * `thorium.mixins.json` sets `"defaultRequire: 0"` and every injection carries
   `require = 0`, so a missing target is a silent no-op at runtime.
-* The only build-time signal is Loom's remapper, and only for the **remap** nodes
-  (`1.21.1`, `1.21.11`). The 26.x nodes use the plain Loom flavor and emit nothing.
-* The unit tests never load a mixin, so they cannot catch it either.
+* The only build-time signal was Loom's remapper, and only for the **remap** nodes
+  (`1.21.1`, `1.21.11`). The 26.x nodes used the plain Loom flavor and emitted nothing.
+* The unit tests never loaded a mixin, so they could not catch it either.
 
-**Impact.** Medium — this is a process defect that will keep producing G-2-class bugs.
+**Now.** New `src/test/java/dev/hyperionfps/mixin/MixinTargetAuditTest.java` runs once
+per version node (the shared test tree is compiled into every node) and:
 
-**Fix direction.**
-* Promote the `:1.21.11:remapJar` "Cannot remap …" warning into a **hard build
-  failure** (Gradle `doLast` check on the remap task's output).
-* Add a **mixin target audit test**: for each declared mixin target method, assert the
-  method exists in the Minecraft jar for every node. This can be done at build time with
-  a small Gradle task that reads `javap`/`ASM` output per node.
-* Alternatively, relax `require = 0` to `require = 1` for targets proven to exist on all
-  versions — but that must be done per-injection, deliberately.
+1. reads the **expanded** `thorium.mixins.json` from the classpath, so it covers
+   exactly the mixins that will be loaded, including the per-node
+   `mixin_legacy` / `mixin_modern` expansions;
+2. parses every mixin class with ASM to recover its `@Mixin` target and its injection
+   method selectors;
+3. reads the target class from the node's Minecraft jar and walks the inheritance
+   chain, mirroring how Mixin resolves a target method;
+4. **fails the build** for any selector that does not match a method.
 
-**Also note.** `FramePacing`'s boot-window policy **is** correctly wired: all five
-`*FramePacingMixin` files call `FramePacing.inBootPhase()` before forcing the swap
-interval to 0, and `FramePacingTest` covers the window boundary. No action needed there.
+A second test runs the audit in reverse: every mixin class compiled into the node must
+be registered in the configuration, otherwise it is dead code that can never apply.
+
+The Minecraft classes are handed to the test through the `thorium.compileClasspath`
+system property, because Loom puts the Minecraft jar on the compile classpath but not
+on the test runtime classpath.
+
+**What it found on the day it was written:** the dead `tickParticleList` target (G-2)
+and — a defect that was *not* in any gap list — `Window#updateVsync`, which does not
+exist on 26.2 at all, so the frame pacing override was inert on that version. Both
+are fixed.
 
 ---
-
 ### G-13 🟢 Anomaly (observed once, not reproducible) — build dirtied a tracked PNG
 
 **Observation.** Immediately after the first `buildAll` of this session, `git status`
@@ -490,62 +471,109 @@ be excluded from templating explicitly.
 
 ---
 
+### 4.2 Subsystems that are implemented but not wired 🔴
+
+Seven subsystems are fully implemented, unit-tested and (in most cases) exposed in the
+settings console, but **no call site invokes them**. They are the "fake toggles" the
+project promised not to ship.
+
+The startup log now names every one of them (see A-13 / D-4), and the console shows
+them as *not wired* / *not available* instead of pretending they work.
+
+| Subsystem | Class | What is missing | Plan |
+| :--- | :--- | :--- | :--- |
+| Chunk-section culling | `SectionCullingEngine` | `shouldRenderSection(...)` is never called — no chunk-section render hook | A-6 |
+| Particle sheet batching | `ParticleBatchEngine` | never called — no particle render submission hook | A-8 |
+| GPU entity instancing | `EntityInstancer` | never called — no entity render submission hook | A-7 |
+| Async light propagation | `AsyncLightEngine` | the daemon worker starts but never receives work | A-9 |
+| GL state filter | `GlStateTracker` | `shouldBindTexture` / `shouldUseProgram` are never consulted | A-10 |
+| Immediate 2D batching | `ThoriumImmediateBatcher` | the flush runs every frame, but `shouldBatchDraw` is never consulted | A-11 |
+| Input pacing | `ThoriumInputPacer` | `recordPacedTurn()` has no call site | A-12 |
+
+**Additionally unsupported on some versions:**
+
+| Subsystem | 1.21.1 | 1.21.11 | 26.1 | 26.2 | 26.3 |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| Chunk upload pacer | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
+
+The 26.x render pipeline uploads chunk meshes through a different path that Thorium
+does not hook yet (PLAN A-4). The console shows the switch as *not available* on
+those versions.
+
+---
 ## 5. Risk register
 
 | ID | Risk | Severity | Likelihood | Mitigation |
 | :--- | :--- | :--- | :--- | :--- |
-| R-1 | Mixin injection breaks on a future Minecraft update | High | **High** — already happened (G-2) | `require = 0` + era routing; add the build-time audit from G-12 |
+| R-1 | Mixin injection breaks on a future Minecraft update | High | **Low now** — the build-time audit fails the build | `require = 0` + era routing + `MixinTargetAuditTest` (G-12) |
 | R-2 | `sun.misc.Unsafe.invokeCleaner` removed in a future JDK | Medium | Low | `OffHeap.available()` degrades to normal GC |
 | R-3 | Memory regression from an unnoticed allocation | Medium | Medium | Enforce NFR-1; add allocation counters (G-7) |
 | R-4 | Occlusion culling causes visible pop-in | Medium | Medium | Conservative thresholds; proximity guards (12-block BVH guard) |
 | R-5 | Stonecutter/Loom toolchain breaks on upgrade | Medium | Low | Configuration cache already disabled; pin plugin versions |
 | R-6 | Extreme FPS mode breaks "vanilla visuals" claims | Low | Medium | Mode is explicit and off by default |
 | R-7 | Multiplayer server-side detection bans the client | Low | Very Low | 100 % client-side, no packet tampering |
-| R-8 | Silent feature loss goes unnoticed (dead code paths, stale logs) | High | High | G-12 build-time audit; startup log must reflect real state |
+| R-8 | Silent feature loss goes unnoticed (dead code paths, stale logs) | High | **Low now** | the build-time audit fails on a dead target; the startup log reports the real state of every subsystem |
 
 ---
 
 ## 6. Backlog (prioritized)
 
+> **Full roadmap:** [`PLAN.md`](./PLAN.md) — the v0.2 work breakdown, per-item
+> acceptance criteria, requirement-coverage matrix and task index. This section is
+> the short form; `PLAN.md` is authoritative for anything added after 0.1.1.
+
 ### P0 — before v0.2
 
-1. **G-2** — Re-target the particle ticking injection at the `ParticleGroup` API so it
-   works on 1.21.11 and 26.x (currently a no-op on 4 of 5 versions).
-2. **G-12** — Add the build-time mixin-target audit so dead targets fail the build.
-3. **G-6** — Correct `README.md` and `MODRINTH.md` (sample count 128, add 1.21.11).
-4. **G-9** — Fix the `fabric-api=integrated` log lie and give `ThoriumFabricHooks` parity.
-5. **G-11** — Tag `0.1.1`.
+1. **A-6 / A-7 / A-8 / A-9 / A-10 / A-11** — give the seven unwired subsystems
+   (§4.2) a real call site, or remove them from the console entirely.
+2. **A-4** — chunk upload pacer on the 26.x render pipeline.
+3. **G-7** — build the benchmark/capture harness; the README table stays empty until
+   the numbers are reproducible.
+4. **G-11** — tag `0.1.1`.
+5. **G-8** — implement real input pacing, or rename the class to telemetry-only.
 
 ### P1 — quality & honesty
 
-6. **G-7** — Build the benchmark/capture harness; regenerate the README numbers.
-7. **G-3** — Resolve the particle simulator naming/pool mismatch.
-8. **G-4** — Remove the per-call `AABB` allocation in `FrustumCache`.
-9. **G-10** — Align `DefaultEntityBridge` with the real culling engines or document it.
-10. Obtain the `hs_err_pid22597.log` from the Android reporter to confirm the native
-    crash attribution in §4.1.
+6. **D-6** — remove the remaining per-call `AABB` allocation in `FrustumCache`.
+7. **G-4** — a primitive frustum test instead of the allocating `AABB` overload.
+8. **D-3** — a render-thread stall watchdog that turns a silent freeze into a
+   diagnosable event.
+9. Obtain the `hs_err_pid22597.log` from the Android reporter to confirm the native
+   crash attribution in §4.1.
 
 ### P2 — feature depth
 
-11. **G-8** — Implement real input pacing (or rename to telemetry-only).
-12. Add `versions/1.21.11` and `26.1`/`26.2` to the release CI build.
-13. Investigate `LegacyVignetteMixin` (exists only in 1.21.1) — either port or drop.
+10. **A-12** — input pacing (or rename it).
+11. **G-4 / G-5 (PLAN)** — `LegacyVignetteMixin` exists only on 1.21.1: port or drop.
+12. **G-9 (PLAN)** — `ThoriumFabricHooks` parity for the other four nodes.
+13. Add a release CI workflow that runs `buildAll`, `test` and the mixin audit on all
+    five nodes.
 
 ### Completed in this cycle
 
 | Item | Status |
 | :--- | :--- |
-| **G-1** — Settings persistence | ✅ `ThoriumConfig` + 11 unit tests |
-| **G-5** — 1.21.1 hotkey parity | ✅ F6 / F7 / F8 via the GLFW key API |
+| **G-2** — particle ticking injection | ✅ Removed; the limit-accounting bug it caused is gone, particle culling stays live on all five nodes |
+| **G-3** — particle simulator naming/pool | ✅ `ThoriumParticleSimulator` deleted, replaced by the honest `ThoriumParticleBudget` |
+| **G-4** — `FrustumCache` allocation | 🟡 Distance test moved first; the remaining allocation needs an accessor mixin |
+| **G-6** — documentation drift | ✅ Corrected; the unverifiable benchmark table was removed and replaced with a per-version feature matrix |
+| **G-10** — `DefaultEntityBridge` no-op | ✅ Delegates to the real culling engines |
+| **G-12** — build-time mixin audit | ✅ `MixinTargetAuditTest` — a dead target fails the build |
+| **A-1** — frame pacer | ✅ `paceFrame()` is wired to `Minecraft#runTick`, with a persisted target-FPS cap |
+| **A-2** — adaptive render distance | ✅ Wired to the game's own render-distance option, with a 60 s user-override yield |
+| **A-3** — frame-context architecture | ✅ One publisher per frame on all five nodes; the per-entity publication is gone |
+| **A-3b** — `LegacyFogMixin` on 1.21.11 | ✅ Ported to the new fog-environment API |
+| **A-13 / D-4** — subsystem report | ✅ The startup log prints the real state of every subsystem |
+| **D-1** — Sodium coexistence | ✅ Competing renderers are detected; Thorium stands down |
+| **D-2** — fast-math safety | ✅ Off by default, disabled under a shader pack, no more double→float truncation |
+| New — 26.2 frame pacing | ✅ `Window#updateVsync` never existed on 26.2; re-targeted to `GpuSurface#configure` |
 | Android launch crash | ✅ Mitigated — safe-mode kill switch + 3 native-call guards |
-| `fabric-api=integrated` log lie | ✅ Fixed — now reports the real state |
-
----
-
 ## 7. Changelog
 
 | Commit | Date | Change |
 | :--- | :--- | :--- |
+| *(uncommitted)* | 2026-10-21 | v0.2 groundwork: mixin target audit, frame context, frame pacer, adaptive distance, particle budget, compatibility probe, honest subsystem report, documentation pass |
+| `948ec68` | 2026-10-20 | Restart & launch crash solved: safe mode, atomic settings persistence, hotkey parity |
 | `3782c32` | 2026-10-20 | Bump version to 0.1.1; isolate per-version metadata |
 | `8c58beb` | 2026-10-20 | Add Minecraft 1.21.11 target with modern render-state adaptions |
 | `764f6d8` | 2026-10-19 | Clean, standard text-based MODRINTH.md |
@@ -568,3 +596,15 @@ be excluded from templating explicitly.
 | 2026-10-20 | **Android crash mitigated** — `ThoriumSafety` safe-mode kill switch added (`-Dhyperionfps.safeMode=true` honoured from mixin bootstrap, plus a persisted config key and an Advanced-tab toggle). `glfwSwapInterval` / `SDL_GL_SetSwapInterval` now require a current context. `ProcessHandle` probe and the whole pre-launch body made non-fatal. |
 | 2026-10-20 | **G-9 partially fixed** — the startup log now reports the real Fabric API hook state instead of hardcoding `fabric-api=integrated`. |
 | 2026-10-20 | Test suite grew from 79 to **97 tests** across 24 classes. `buildAll` green on all five nodes. |
+| 2026-10-21 | **G-12 fixed** — new `MixinTargetAuditTest` reads the expanded `thorium.mixins.json` from the classpath, parses every mixin with ASM and asserts that each injection target exists in that node's Minecraft jar (walking the inheritance chain). A dead target now **fails the build**. The Minecraft jar is handed to the test through the new `thorium.compileClasspath` system property, because Loom keeps it off the test runtime classpath. |
+| 2026-10-21 | The audit immediately found a defect that was in **no** gap list: `Window#updateVsync` does not exist on 26.2, so the frame-pacing override was inert there. 26.2's `ModernFramePacingMixin` now targets `com.mojang.blaze3d.systems.GpuSurface#configure` instead. |
+| 2026-10-21 | **G-2 / G-3 fixed** — the dead `tickParticleList` injection was removed. Reading vanilla's tick loop showed that Thorium's re-implementation also skipped the particle-limit decrement, so on 1.21.1 (the only node where it ran) the engine stopped creating particles permanently once enough of them had died. `ThoriumParticleSimulator` was deleted; `ThoriumParticleBudget` (a live creation budget) replaced it. |
+| 2026-10-21 | **A-3 fixed** — `ThoriumFrameContext` is now the single authoritative per-frame publisher. The modern entity-culling hook used to publish the camera context **once per entity**, which flushed the BVH cache, stepped the dynamic distance scale and fed the adaptive-distance EMA hundreds of times per frame. New per-node level-renderer hooks (`LegacyLevelRendererFrameMixin` on 1.21.11, `ModernLevelRendererFrameMixin` on 26.1/26.2/26.3) publish it once per frame. |
+| 2026-10-21 | **A-1 fixed** — `ThoriumFramePacer.paceFrame()` was dead code; it is now driven by a core `Minecraft#runTick` hook (the only hook that fires exactly once per frame on every version). The pacer gained an absolute, drift-free deadline with bounded catch-up and a persisted target-FPS cap (`frame.pacer.targetFps`) exposed in the console. |
+| 2026-10-21 | **A-2 fixed** — `AdaptiveDistanceController` is now bound to the game's own render-distance option and is driven by a real frame delta. It yields for 60 s when the player changes the distance by hand. |
+| 2026-10-21 | **A-13 / D-4 fixed** — the startup log printed a hardcoded list of subsystem states. It now prints a live report (`ThoriumSubsystemReport`) that distinguishes ACTIVE / IDLE / DISABLED / UNWIRED / UNSUPPORTED, and names the seven subsystems that still have no call site. |
+| 2026-10-21 | **D-1 / D-2 fixed** — `ThoriumCompatibility` detects competing renderers (Sodium family) and shader packs (Iris/Oculus/OptiFine). With a competing renderer, Thorium stands down the overlapping culling; with a shader pack, the fast-math overrides are disabled. The fast-math overrides are now off by default, and the double-returning `Mth.atan2` / `Mth.invSqrt` are no longer overridden at all. |
+| 2026-10-21 | **G-6 fixed** — `README.md` / `MODRINTH.md` corrected: the unverifiable benchmark table was removed and replaced with a per-version feature matrix and a "measure it yourself" methodology. |
+| 2026-10-21 | **G-10 fixed** — `DefaultEntityBridge` now delegates to the real culling engines instead of always returning `false`. |
+| 2026-10-21 | **A-3b fixed** — `LegacyFogMixin` ported to 1.21.11 (the old `FogRenderer#setupFog` signature is gone; the hook now sits on `AtmosphericFogEnvironment#setupFog`). |
+| 2026-10-21 | Test suite grew from 97 to **117 tests** across 26 classes. `buildAll` green on all five nodes, five jars produced. |

@@ -7,8 +7,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import dev.hyperionfps.culling.AsyncOcclusionCuller;
-import dev.hyperionfps.frame.ThoriumFrametimeTracker;
+import dev.hyperionfps.frame.ThoriumFrameContext;
 import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -19,7 +18,11 @@ import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Initializes camera and frame timing once per frame at renderLevel start.
+ * Publishes Thorium's world frame at the start of {@code LevelRenderer#renderLevel}.
+ *
+ * <p>1.21.1 is the only version that still keeps the culling frustum in a
+ * {@code LevelRenderer} field, so the frustum can be published together with the camera
+ * position.</p>
  */
 @Mixin(LevelRenderer.class)
 public abstract class LegacyLevelRendererFrameMixin {
@@ -36,8 +39,6 @@ public abstract class LegacyLevelRendererFrameMixin {
             GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f modelViewMatrix, Matrix4f projectionMatrix,
             CallbackInfo ci) {
         Vec3 pos = camera.getPosition();
-        AsyncOcclusionCuller.onFrameBegin(pos.x, pos.y, pos.z, this.cullingFrustum, this.level);
-        ThoriumFrametimeTracker.recordFrame();
-        dev.hyperionfps.anim.ThoriumEntityLodThrottler.onFrame();
+        ThoriumFrameContext.beginWorldFrame(pos.x, pos.y, pos.z, this.cullingFrustum, this.level);
     }
 }

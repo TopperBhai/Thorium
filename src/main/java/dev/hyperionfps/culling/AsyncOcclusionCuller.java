@@ -3,13 +3,12 @@ package dev.hyperionfps.culling;
 import java.util.BitSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import dev.hyperionfps.HyperionFPS;
-import net.minecraft.client.renderer.culling.Frustum;
+import dev.hyperionfps.particle.ThoriumParticleBudget;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.BlockGetter;
@@ -29,7 +28,6 @@ public final class AsyncOcclusionCuller {
 
     private static final BitSet ENTITY_CULLED_CACHE = new BitSet(65536);
     private static final ConcurrentHashMap<Long, Boolean> BLOCK_ENTITY_CULLED_CACHE = new ConcurrentHashMap<>(1024);
-    private static final AtomicInteger ACTIVE_PARTICLE_COUNT = new AtomicInteger(0);
 
     private static volatile double dynamicDistanceScale = 1.0;
     private static volatile boolean extremeFpsMode = false;
@@ -46,7 +44,6 @@ public final class AsyncOcclusionCuller {
     public static BlockGetter getCurrentLevel() { return currentLevel; }
 
     private static final AtomicBoolean INITIALIZED = new AtomicBoolean(false);
-    private static long lastFrameTimeNanos = System.nanoTime();
 
     private AsyncOcclusionCuller() {
     }
@@ -65,7 +62,7 @@ public final class AsyncOcclusionCuller {
     public static void clearCache() {
         ENTITY_CULLED_CACHE.clear();
         BLOCK_ENTITY_CULLED_CACHE.clear();
-        ACTIVE_PARTICLE_COUNT.set(0);
+        ThoriumParticleBudget.resetWindow();
     }
 
     /** Evicts cached entries for a specific unloaded chunk. */
@@ -90,7 +87,7 @@ public final class AsyncOcclusionCuller {
                 if (BLOCK_ENTITY_CULLED_CACHE.size() > 4096) {
                     BLOCK_ENTITY_CULLED_CACHE.clear();
                 }
-                ACTIVE_PARTICLE_COUNT.set(0);
+                ThoriumParticleBudget.resetWindow();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
@@ -98,25 +95,31 @@ public final class AsyncOcclusionCuller {
         }
     }
 
-    /** Called at the start of each frame to update camera and timing context. */
-    public static void onFrameBegin(double camX, double camY, double camZ, Frustum frustum, BlockGetter level) {
+    /**
+     * Publishes the camera context for the current frame.
+     *
+     * <p>Called exactly once per world frame by
+     * {@link dev.hyperionfps.frame.ThoriumFrameContext#beginWorldFrame}. It only writes
+     * the camera state - the per-frame governor lives in
+     * {@link #updateDynamicDistanceScale(long)} so that it cannot be executed more than
+     * once per frame.</p>
+     */
+    public static void publishCamera(double camX, double camY, double camZ, BlockGetter level) {
         cameraX = camX;
         cameraY = camY;
         cameraZ = camZ;
         currentLevel = level;
-        OcclusionGrid.onCameraUpdate(camX, camY, camZ);
-        if (frustum != null) {
-            FrustumCache.update(frustum);
-        }
-        ThoriumBvhCuller.onFrameBegin();
+    }
 
-        // Dynamic distance scaling based on frame pacing
-        long now = System.nanoTime();
-        long deltaNanos = now - lastFrameTimeNanos;
-        lastFrameTimeNanos = now;
-        dev.hyperionfps.adaptive.AdaptiveDistanceController.getInstance().onFrame(deltaNanos);
-
-        // Target: 60 FPS (16.6ms). If delta > 20ms (< 50 FPS), scale down distance
+    /**
+     * Updates the dynamic distance scale from a real frame delta.
+     *
+     * <p>The scale shrinks by {@code 0.05} when a frame took longer than 20 ms and grows
+     * by {@code 0.02} when a frame was faster than 14 ms, clamped to
+     * {@code [0.35, 1.0]}. Because this runs once per frame - and not once per entity -
+     * the scale converges instead of collapsing to its floor within a single frame.</p>
+     */
+    public static void updateDynamicDistanceScale(long deltaNanos) {
         if (deltaNanos > 20_000_000L) {
             dynamicDistanceScale = Math.max(0.35, dynamicDistanceScale - 0.05);
         } else if (deltaNanos < 14_000_000L && dynamicDistanceScale < 1.0) {
@@ -190,13 +193,9 @@ public final class AsyncOcclusionCuller {
         double by = pos.getY() + 0.5;
         double bz = pos.getZ() + 0.5;
 
-        // 1. Frustum Culling (test 1x1x1 block bounds)
-        if (!FrustumCache.isVisible(pos.getX(), pos.getY(), pos.getZ(),
-                pos.getX() + 1.0, pos.getY() + 1.0, pos.getZ() + 1.0)) {
-            return true;
-        }
-
-        // 2. Dynamic Distance Scaling
+        // 1. Dynamic Distance Scaling. Checked before the frustum test on purpose: the
+        // frustum test needs a temporary AABB, and this rejects the vast majority of the
+        // block entities without allocating anything.
         double dx = bx - camX;
         double dy = by - camY;
         double dz = bz - camZ;
@@ -204,6 +203,12 @@ public final class AsyncOcclusionCuller {
 
         double maxDist = (extremeFpsMode ? 16.0 : 48.0) * dynamicDistanceScale;
         if (distSqr > (maxDist * maxDist)) {
+            return true;
+        }
+
+        // 2. Frustum Culling (test 1x1x1 block bounds)
+        if (!FrustumCache.isVisible(pos.getX(), pos.getY(), pos.getZ(),
+                pos.getX() + 1.0, pos.getY() + 1.0, pos.getZ() + 1.0)) {
             return true;
         }
 
@@ -234,8 +239,10 @@ public final class AsyncOcclusionCuller {
             return false;
         }
 
-        int maxParticleBudget = extremeFpsMode ? 64 : 1500;
-        if (ACTIVE_PARTICLE_COUNT.incrementAndGet() > maxParticleBudget) {
+        int maxParticleBudget = extremeFpsMode
+                ? ThoriumParticleBudget.EXTREME_BUDGET
+                : ThoriumParticleBudget.DEFAULT_BUDGET;
+        if (!ThoriumParticleBudget.admit(maxParticleBudget)) {
             return true;
         }
 

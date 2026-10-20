@@ -5,8 +5,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import dev.hyperionfps.anim.ThoriumEntityLodThrottler;
-import dev.hyperionfps.frame.ThoriumFrametimeTracker;
 import dev.hyperionfps.gui.ThoriumGuiManager;
 import dev.hyperionfps.gui.ThoriumModernHudRenderer;
 import dev.hyperionfps.render.batching.HudBatcher;
@@ -24,8 +22,6 @@ public abstract class LegacyHudBatchingMixin {
     @Inject(method = "render", at = @At("HEAD"), require = 0)
     private void hyperionfps$beginBatch(GuiGraphics guiGraphics, DeltaTracker deltaTracker, CallbackInfo ci) {
         HudBatcher.beginHudBatch();
-        ThoriumFrametimeTracker.recordFrame();
-        ThoriumEntityLodThrottler.onFrame();
     }
 
     @Inject(method = "render", at = @At("TAIL"), require = 0)
