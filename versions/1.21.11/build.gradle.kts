@@ -44,12 +44,13 @@ tasks.withType<JavaCompile>().configureEach {
 val templateValues = mapOf(
     "id" to property("mod.id").toString(),
     "name" to property("mod.name").toString(),
-    "version" to property("mod.version").toString(),
+    "version" to project.version.toString(),
     "group" to property("mod.group").toString(),
     "author" to property("mod.author").toString(),
     "license" to property("mod.license").toString(),
     "description" to property("mod.description").toString(),
-    "minecraft" to "*",
+    "minecraft" to (project.findProperty("mod.mc_range") ?: minecraftVersion).toString(),
+    "java_version" to "21",
     "mixin_legacy" to ",\n    \"legacy.LegacyMthMixin\",\n    \"legacy.LegacyOptionsScreenMixin\",\n    \"legacy.LegacyPauseScreenMixin\",\n    \"legacy.LegacyTitleScreenMixin\",\n    \"legacy.LegacyFramePacingMixin\",\n    \"legacy.LegacyEntityCullingMixin\",\n    \"legacy.LegacyBlockEntityCullingMixin\",\n    \"legacy.LegacyWeatherMixin\",\n    \"legacy.LegacyKeyboardMixin\",\n    \"legacy.LegacyHudBatchingMixin\",\n    \"legacy.LegacyShadowMixin\",\n    \"legacy.LegacyChunkUploadBudgetMixin\",\n    \"legacy.LegacyCloudsMixin\",\n    \"legacy.LegacyEntityLodMixin\",\n    \"legacy.LegacySoundEngineMixin\",\n    \"legacy.LegacyTextureAnimationMixin\"",
     "mixin_modern" to ""
 )
