@@ -27,7 +27,7 @@ stonecutter {
         // 1.21.1 - classic era (Minecraft obfuscated, remapped to intermediary)
         // 26.3   - modern era (Minecraft >= 26.1 ships unobfuscated Mojang names)
         // ---------------------------------------------------------------
-        versions("1.21.1", "26.1", "26.2", "26.3")
+        versions("1.21.1", "1.21.11", "26.1", "26.2", "26.3")
         vcsVersion = "26.3"
 
         // Each node project uses the build script inside its own directory:

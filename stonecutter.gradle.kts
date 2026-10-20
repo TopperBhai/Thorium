@@ -19,7 +19,7 @@ tasks.register<Copy>("buildAll") {
     description = "Builds Thorium release jars for every registered Minecraft version into build/dist without test clutter."
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
     // Only compile the jars, avoiding heavy test suites and redundant rebuilds
-    dependsOn(subprojects.map { "${it.path}:jar" })
+    dependsOn(subprojects.map { "${it.path}:assemble" })
     from(subprojects.map { it.layout.buildDirectory.dir("libs") })
     include("*.jar")
     exclude("*-sources.jar", "*-dev.jar")
