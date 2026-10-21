@@ -14,6 +14,8 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import dev.hyperionfps.adaptive.AdaptiveDistanceController;
+
 class ThoriumConfigTest {
 
     @Test
@@ -149,5 +151,14 @@ class ThoriumConfigTest {
 
         assertNotNull(config.asMap());
         assertFalse(config.asMap().isEmpty(), "capturing should record subsystem states");
+    }
+
+    @Test
+    void adaptiveRenderDistanceIsOptIn(@TempDir Path dir) {
+        ThoriumConfig config = ThoriumConfig.forFile(dir.resolve("thorium-config.json"));
+        config.applyToSubsystems();
+
+        assertFalse(AdaptiveDistanceController.getInstance().isEnabled(),
+                "the adaptive render distance rewrites a vanilla option and must be opt-in");
     }
 }

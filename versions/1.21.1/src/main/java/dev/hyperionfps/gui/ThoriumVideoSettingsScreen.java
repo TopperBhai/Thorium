@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
+import dev.hyperionfps.adaptive.AdaptiveDistanceController;
 import dev.hyperionfps.anim.ThoriumEntityLodThrottler;
 import dev.hyperionfps.audio.ThoriumSoundGovernor;
 import dev.hyperionfps.batch.ThoriumImmediateBatcher;
@@ -16,6 +17,7 @@ import dev.hyperionfps.core.ThreadGovernor;
 import dev.hyperionfps.core.ThoriumSafety;
 import dev.hyperionfps.culling.AsyncOcclusionCuller;
 import dev.hyperionfps.culling.ThoriumBvhCuller;
+import dev.hyperionfps.discord.ThoriumDiscordInvite;
 import dev.hyperionfps.frame.ThoriumFrametimeTracker;
 import dev.hyperionfps.frame.ThoriumFramePacer;
 import dev.hyperionfps.input.ThoriumInputPacer;
@@ -61,6 +63,15 @@ public class ThoriumVideoSettingsScreen extends Screen {
     private final List<AbstractWidget> contentWidgets = new ArrayList<>();
     private SettingRowButton hoveredRow = null;
 
+    /** Top edge of the scrollable settings list. */
+    private int contentTop = 44;
+
+    /** Bottom edge of the scrollable settings list - the footer bar sits below it. */
+    private int contentBottom = 200;
+
+    /** Current vertical scroll offset of the settings list, in pixels. */
+    private int scrollOffset = 0;
+
     public ThoriumVideoSettingsScreen(Screen lastScreen) {
         super(Component.literal("Thorium Settings"));
         this.lastScreen = lastScreen;
@@ -103,7 +114,13 @@ public class ThoriumVideoSettingsScreen extends Screen {
         // -------------------------------------------------------------
         // 2. Main Body: Settings Rows
         // -------------------------------------------------------------
+        // The rows live in a band between the header and the footer bar. When the
+        // window is too short for the whole list, the list scrolls inside that band
+        // instead of spilling over the footer.
+        this.contentTop = ThoriumSettingsLayout.contentTop();
+        this.contentBottom = ThoriumSettingsLayout.contentBottom(this.height);
         buildTabContent();
+        applyScrollOffset();
 
         // -------------------------------------------------------------
         // 3. Footer Bar: Vanilla Settings (Left) & Done (Right)
@@ -138,15 +155,17 @@ public class ThoriumVideoSettingsScreen extends Screen {
         }
         contentWidgets.clear();
         hoveredRow = null;
+        this.scrollOffset = 0;
         buildTabContent();
+        applyScrollOffset();
     }
 
     private void buildTabContent() {
-        int marginX = 24;
-        int startY = 44;
-        int listWidth = Math.min(360, (this.width / 2) + 20);
-        int rowH = 23;
-        int rowGap = 4;
+        int marginX = listLeft();
+        int startY = this.contentTop;
+        int listWidth = listRight() - marginX;
+        int rowH = ThoriumSettingsLayout.ROW_HEIGHT;
+        int rowGap = ThoriumSettingsLayout.ROW_GAP;
         int currentY = startY;
 
         switch (currentTab) {
@@ -192,6 +211,26 @@ public class ThoriumVideoSettingsScreen extends Screen {
                         b -> ThoriumFramePacer.setEnabled(!ThoriumFramePacer.isEnabled()),
                         "High-precision micro-sleep frame pacer. Delivers butter-smooth frame intervals and drastically improves 1% low FPS.",
                         "⚡ Smooth Frametimes"));
+                currentY += rowH + rowGap;
+
+                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
+                        "Community Discord",
+                        () -> "OPEN INVITE",
+                        SettingControlType.ACTION,
+                        () -> true,
+                        b -> ThoriumDiscordScreen.openInvite(),
+                        "Opens the Thorium community server in your browser for early builds, tuning help and release notes.",
+                        "★ Join The Community"));
+                currentY += rowH + rowGap;
+
+                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
+                        "Invite On First Launch",
+                        () -> ThoriumDiscordInvite.isEnabled() ? "ON" : "OFF",
+                        SettingControlType.CHECKBOX,
+                        () -> ThoriumDiscordInvite.isEnabled(),
+                        b -> ThoriumDiscordInvite.setEnabled(!ThoriumDiscordInvite.isEnabled()),
+                        "Shows the community invite once on the main menu. It never appears again after it has been shown or dismissed.",
+                        "⚡ One-Time Invite"));
                 currentY += rowH + rowGap;
 
                 addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
@@ -307,6 +346,23 @@ public class ThoriumVideoSettingsScreen extends Screen {
                 currentY += rowH + rowGap;
 
                 addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
+                        "Adaptive Render Distance",
+                        () -> AdaptiveDistanceController.getInstance().isEnabled()
+                                ? ("ON (" + AdaptiveDistanceController.getInstance().getCurrentDistance() + "ch)")
+                                : "OFF",
+                        SettingControlType.CHECKBOX,
+                        () -> AdaptiveDistanceController.getInstance().isEnabled(),
+                        b -> {
+                            boolean next = !AdaptiveDistanceController.getInstance().isEnabled();
+                            AdaptiveDistanceController.getInstance().setEnabled(next);
+                            ThoriumConfig.get().setBoolean(ThoriumConfig.KEY_ADAPTIVE_DISTANCE, next);
+                            ThoriumConfig.get().saveNow();
+                        },
+                        "Lowers the render distance when the framerate falls below the target. It never raises it again on its own, because every change makes the game re-download its whole chunk cache.",
+                        "Frame Rate Protection"));
+                currentY += rowH + rowGap;
+
+                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
                         "Safe Mode (Disable Thorium)",
                         () -> ThoriumSafety.isSafeMode() ? "ON" : "OFF",
                         SettingControlType.CHECKBOX,
@@ -370,9 +426,53 @@ public class ThoriumVideoSettingsScreen extends Screen {
         }
     }
 
+    /**
+     * Adds a settings row to the scrollable list.
+     *
+     * <p>The row is added as a plain widget instead of a renderable widget: the rows
+     * are drawn by hand inside the clipped content band, so a row can never be drawn
+     * over the footer bar.</p>
+     */
     private void addSettingRow(SettingRowButton button) {
-        this.addRenderableWidget(button);
+        this.addWidget(button);
         this.contentWidgets.add(button);
+    }
+
+    /**
+     * Positions the settings rows for the current scroll offset.
+     *
+     * <p>Rows that scrolled completely out of the content band are hidden, so they
+     * are neither drawn nor clickable. A row that is only partly inside the band is
+     * clipped by the scissor in the render pass.</p>
+     */
+    private void applyScrollOffset() {
+        this.scrollOffset = ThoriumSettingsLayout.clampScrollOffset(
+                this.scrollOffset, contentWidgets.size(), this.height);
+        for (AbstractWidget w : contentWidgets) {
+            if (w instanceof SettingRowButton row) {
+                int y = row.baseY - this.scrollOffset;
+                row.setY(y);
+                row.bandTop = this.contentTop;
+                row.bandBottom = this.contentBottom;
+                row.visible = ThoriumSettingsLayout.isRowVisible(y, this.height);
+            }
+        }
+    }
+
+    /** Scrolls the settings list by the given number of pixels (positive scrolls up). */
+    private void scrollBy(int pixels) {
+        this.scrollOffset += pixels;
+        applyScrollOffset();
+    }
+
+    /** Left edge of the settings list column. */
+    private int listLeft() {
+        return 24;
+    }
+
+    /** Right edge of the settings list column. */
+    private int listRight() {
+        return listLeft() + Math.min(360, (this.width / 2) + 20);
     }
 
     private void applyPreset(String preset) {
@@ -419,7 +519,6 @@ public class ThoriumVideoSettingsScreen extends Screen {
                 ThoriumFramePacer.setEnabled(true);
                 ThoriumChunkUploadPacer.setEnabled(true);
                 ThoriumCompatibility.setFastMathEnabled(true);
-                ThoriumCompatibility.setFastMathEnabled(false);
             }
         }
         ThoriumConfig.get().setString(ThoriumConfig.KEY_PRESET, preset);
@@ -503,8 +602,16 @@ public class ThoriumVideoSettingsScreen extends Screen {
             }
         }
 
-        // 4. Render Child Widgets (Tabs, Buttons, Setting Rows)
+        // 4. Render Child Widgets (Tabs, Buttons, Presets, Footer)
         super.render(graphics, mouseX, mouseY, partialTicks);
+
+        // 5. Render the settings rows inside the clipped content band. The scissor
+        //    keeps a partially scrolled row from being drawn over the footer bar.
+        graphics.enableScissor(listLeft(), this.contentTop, listRight(), this.contentBottom);
+        for (AbstractWidget w : contentWidgets) {
+            w.render(graphics, mouseX, mouseY, partialTicks);
+        }
+        graphics.disableScissor();
     }
 
     private List<String> wrapText(String text, int maxWidth) {
@@ -527,6 +634,25 @@ public class ThoriumVideoSettingsScreen extends Screen {
             result.add(current.toString());
         }
         return result;
+    }
+
+    /**
+     * Scrolls the settings list with the mouse wheel.
+     *
+     * <p>Only the list column reacts to the wheel, and only while the cursor is over
+     * it, so the wheel never steals an event from the tabs, the presets or the
+     * footer bar. Vanilla reports a wheel-up event with a positive delta, which
+     * scrolls the list up - the same direction the advancements screen uses.</p>
+     */
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (scrollY != 0.0D
+                && mouseX >= listLeft() && mouseX <= listRight()
+                && mouseY >= this.contentTop && mouseY <= this.contentBottom) {
+            scrollBy((int) Math.round(scrollY * 20.0D));
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
     @Override
@@ -555,6 +681,12 @@ public class ThoriumVideoSettingsScreen extends Screen {
         final Consumer<SettingRowButton> onClickAction;
         final String description;
         final String impactBadge;
+        /** Y position of the row in the unscrolled list - the scroll offset is applied to it. */
+        final int baseY;
+        /** Top edge of the visible content band - a click above it is ignored. */
+        int bandTop = 0;
+        /** Bottom edge of the visible content band - a click below it is ignored. */
+        int bandBottom = Integer.MAX_VALUE;
         private String tempStatus = null;
 
         public SettingRowButton(int x, int y, int width, int height,
@@ -574,10 +706,19 @@ public class ThoriumVideoSettingsScreen extends Screen {
             this.onClickAction = onClickAction;
             this.description = description;
             this.impactBadge = impactBadge;
+            this.baseY = y;
         }
 
         public void setTempStatus(String status) {
             this.tempStatus = status;
+        }
+
+        @Override
+        public boolean isMouseOver(double mouseX, double mouseY) {
+            // A row that is only partly inside the content band must not react to a
+            // click in its clipped part: that part of the screen belongs to the
+            // footer bar.
+            return mouseY >= this.bandTop && mouseY < this.bandBottom && super.isMouseOver(mouseX, mouseY);
         }
 
         @Override

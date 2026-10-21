@@ -112,11 +112,25 @@ Format: `REQ-<AREA>-<n>` · **Must** = required for v0.2 · **Should** = desirab
 
 | ID | Requirement | Priority |
 | :--- | :--- | :--- |
-| REQ-ADAPT-1 | Adjust render distance automatically via an EMA of instantaneous FPS (α = 0.15, 2 s cooldown). | Must |
-| REQ-ADAPT-2 | Step distance down 1 chunk when smoothed FPS < target − 5; step up 1 chunk when > target + 10. | Must |
+| REQ-ADAPT-1 | Adjust render distance automatically via an EMA of instantaneous FPS (α = 0.15, 2 s evaluation interval). | Must |
+| REQ-ADAPT-2 | Step distance **down** 1 chunk when smoothed FPS < target − 5 for 2 consecutive evaluations. The governor must **never** raise the distance on its own: every change to `Options#renderDistance` makes the client drop and re-download its whole chunk cache. | Must |
 | REQ-ADAPT-3 | Clamp target FPS to [20, 360] and distance to [2, 64]. | Must |
 | REQ-ADAPT-4 | Propagate light updates asynchronously via a daemon worker (256 tasks per batch, 10 ms idle park). | Should |
 | REQ-ADAPT-5 | Detect the host launcher and GC from process evidence (`-Xmx` presence, ZGC/Shenandoah/G1/Parallel/Serial/CMS). | Should |
+| REQ-ADAPT-6 | Rate-limit distance changes: at most one applied change per 30 s settle window, and none during the first 10 s of a world (the loading hitch must not trigger a reload). | Must |
+| REQ-ADAPT-7 | The adaptive render distance is **opt-in** (`adaptive.distance.enabled` defaults to `false`) and is exposed as a switch in the settings console on every version. | Must |
+| REQ-ADAPT-8 | The client must never write `Options#serverRenderDistance`; that field is owned by the server and is set from `ClientboundSetChunkCacheRadiusPacket`. | Must |
+
+### 2.7 Community invite
+
+| ID | Requirement | Priority |
+| :--- | :--- | :--- |
+| REQ-DISC-1 | Show a one-time invite card over the main menu on the first launch, offering the community invite (`https://discord.gg/TbJtmvJKB3`). | Should |
+| REQ-DISC-2 | The card is offered **exactly once**: it is shown when the main menu first ticks and it is never shown again after it has been shown or dismissed. | Must |
+| REQ-DISC-3 | The card is opt-out: `discord.invite.enabled` (default `true`) and `discord.invite.shown` are persisted in `thorium-config.json`. | Must |
+| REQ-DISC-4 | The invite stays reachable from the settings console (*Community Discord* → opens the link in the browser) on every version. | Must |
+| REQ-DISC-5 | The browser hand-off is era-specific (`net.minecraft.Util` / `net.minecraft.util.Util` / `Blaze3D.openUri`) and therefore lives in the per-version `ThoriumDiscordScreen`. | Must |
+| REQ-DISC-6 | The invite is recorded as shown the moment the card is opened, so closing the game while the card is on screen does not re-offer it on the next launch. | Must |
 
 ### 2.6 User interface
 
@@ -130,6 +144,7 @@ Format: `REQ-<AREA>-<n>` · **Must** = required for v0.2 · **Should** = desirab
 | REQ-UI-6 | Show a live preview/explanation of what each toggle does and its hardware impact. | Should |
 | REQ-UI-7 | Surface a one-line diagnostic telemetry summary combining memory, culling state, GL skips and batched draws. | Must |
 | REQ-UI-8 | Provide a **Safe Mode** escape hatch, both as a settings toggle and as a `-D` system property, that disables every mixin and optimisation. | Must |
+| REQ-UI-9 | The settings console must stay usable on a short window: the rows scroll inside the band between the header and the footer bar, so a row is never drawn over the footer and every row stays reachable. | Must |
 
 ### 2.7 Platform & compatibility
 
@@ -234,6 +249,7 @@ code. Mixins call *into* policy engines; policy engines never call mixins.
 | Particle sheets / quads per sheet | 5 / 4096 (40 floats per quad) | `ParticleBatchEngine` |
 | Instance batch size / stride | 4096 / 32 bytes | `EntityInstancer` |
 | EMA alpha / adjust interval | 0.15 / 2000 ms | `AdaptiveDistanceController` |
+| Adaptive settle window / warm-up | 30 s / 10 s per world | `AdaptiveDistanceController`, `ThoriumFrameContext` |
 | Render thread priority | `Thread.MAX_PRIORITY` (10) | `ThreadGovernor` |
 
 ---
@@ -340,7 +356,9 @@ not silently drop settings.
 | `particle.batcher.enabled` | Particle sheet batching | `true` |
 | `entity.instancer.enabled` | GPU entity instancing | `true` |
 | `lighting.async.enabled` | Async light engine | `true` |
-| `adaptive.distance.enabled` | Adaptive render distance | `true` |
+| `adaptive.distance.enabled` | Adaptive render distance (opt-in — it rewrites a vanilla option) | `false` |
+| `discord.invite.enabled` | One-time community invite on the main menu | `true` |
+| `discord.invite.shown` | Whether the community invite has already been offered | `false` |
 
 Persistence rules:
 * The file is written on every user action (toggle click, preset selection, screen close).
@@ -386,7 +404,7 @@ measurement or a value the game owns:
 | `HudBatcher.enabled` | `AtomicBoolean` | `true` (persisted) |
 | `EntityInstancer.enabled` / `ParticleBatchEngine.enabled` | `AtomicBoolean` | `true` (persisted) |
 | `AsyncLightEngine.enabled` | `AtomicBoolean` | `true` (persisted) |
-| `AdaptiveDistanceController.enabled` | `AtomicBoolean` | `true` (persisted) |
+| `AdaptiveDistanceController.enabled` | `AtomicBoolean` | `false` (opt-in, persisted) |
 | `ThoriumGuiManager.HUD_ENABLED` | `AtomicBoolean` | `true` (persisted) |
 | `AdaptiveDistanceController.currentDistance` | `volatile int` | `12` (adapted at runtime) |
 

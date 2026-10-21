@@ -1,7 +1,8 @@
 # AGENTS.md — Operating Manual for Thorium
 
 **Repository:** Thorium (mod id `thorium`, internal codename `Th-90`)
-**Package root:** `dev.hyperionfps`
+**Java package root:** `dev.hyperionfps` (the `mod.group=dev.thorium` in
+`gradle.properties` is *mod metadata only* — it is not the package root)
 **Type:** Minecraft **client-side** performance/frame-pacing optimization mod (Fabric)
 
 This file tells an AI agent (or new human) how to work in this repo *correctly*.
@@ -18,9 +19,9 @@ It is the operational contract. For *what* the product is supposed to do, read
 2. **Never hand-edit the generated mixin list in `src/main/resources/thorium.mixins.json`
    beyond the two template placeholders.** The file is a Gradle template; the literal
    mixin names are injected per version node. See §4.
-3. **Never add a Minecraft-version-specific import to `src/main/java/`.** Shared source
-   must compile against *every* version in the matrix. Version-specific code goes in
-   `versions/<mc>/src/main/java/`. See §3.
+3. **Never add a Minecraft-version-specific import to `src/main/java/`.** Shared
+   source must compile against *every* version in the matrix. Version-specific code goes
+   in `versions/<mc>/src/main/java/`. See §3.
 4. **Never allocate on the render thread** in hot paths. This is the single most
    important invariant of the codebase. See §7.
 5. **Never remove `require = 0` from a mixin injection** unless you have verified the
@@ -30,6 +31,9 @@ It is the operational contract. For *what* the product is supposed to do, read
 6. **Do not add a new dependency** without checking the legacy (pre-26.1) nodes still
    resolve it — `1.21.1` and `1.21.11` use a different Loom flavor and different
    mappings.
+7. **Never write a vanilla option that the server also owns** — most importantly
+   `Options#renderDistance`. See §10.11; it is the single most expensive mistake this
+   codebase has made.
 
 ---
 
@@ -41,13 +45,14 @@ All commands are run **from the repository root** and use the bundled Gradle wra
 | :--- | :--- | :--- |
 | Build every version | `./gradlew buildAll` | Aggregates `assemble` for all 5 nodes → `build/dist/*.jar`. Excludes `-sources.jar` / `-dev.jar`. |
 | Build one version | `./gradlew :26.3:build` | Jar lands in `versions/26.3/build/libs/thorium-0.1.1+26.3.jar` |
-| Run tests (one version) | `./gradlew :26.3:test` | **The gate.** 117 tests / 26 classes. |
+| Run tests (one version) | `./gradlew :26.3:test` | **The gate.** 130 tests / 30 classes. |
 | Run tests (all versions) | `./gradlew test` | Same shared test tree compiles into every node. |
+| Run **one** test class | `./gradlew :26.3:test --tests "dev.hyperionfps.adaptive.AdaptiveDistanceTest"` | Fastest way to iterate on a single subsystem. |
 | Compile only | `./gradlew :26.3:compileJava` | Fastest syntax/type check. |
 | Launch dev client | `./gradlew :26.3:runClient` | Interactive; not usable in CI. |
 | Clean | `./gradlew clean` | Also `versions/*/build` dirs are gitignored. |
 
-Windows users can use `gradlew.bat` in place of `./gradlew`.
+Windows users use `gradlew.bat` in place of `./gradlew`.
 
 ### The mixin target audit is part of `test`
 
@@ -92,16 +97,39 @@ task's `doFirst` block.
   not configuration-cache clean. Do not try to "fix" this.
 * JDK 25 is auto-provisioned via the `foojay-resolver-convention` plugin — no manual
   JDK install needed.
+* The 26.x nodes have **no `remapJar` task** (plain Loom). Use `assemble` / `build`.
 
 ### Definition of done (minimum bar before proposing a change)
 
 ```bash
 ./gradlew :26.3:test        # 0 failures
+./gradlew test              # all five nodes
 ./gradlew buildAll          # all 5 nodes produce a jar
 ```
 
 If a change touches shared source (`src/main/java/`), **all five** nodes must still
 compile. `buildAll` is the only command that proves it.
+
+---
+
+## 2a. Looking up Minecraft internals (`javap`)
+
+The `net/` folder in the repo root is a **stale partial decompile** (7 files) and is
+gitignored. It is not a usable reference. The real source of truth is the Loom cache:
+
+```powershell
+# 26.x — the jar is already in Mojang names:
+javap -p -c -classpath "$env:USERPROFILE\.gradle\caches\fabric-loom\26.3\minecraft-client.jar" net.minecraft.client.Options
+
+# 1.21.x — the GLOBAL cache jar is in intermediary names; the PROJECT-local
+# loom-cache jar is Mojang-named:
+$jar = (Get-ChildItem .gradle/loom-cache/minecraftMaven -Recurse -Filter "*1.21.1-loom*.jar" | Select-Object -First 1).FullName
+javap -p -c -classpath $jar net.minecraft.client.Options
+```
+
+`javap -c` (bytecode) is how you answer "what does vanilla actually do here" — it is
+how the render-distance chain in §10.11 was proven. `javap -p` alone gives you the
+member list, which is enough to answer "does this method exist on this version?".
 
 ---
 
@@ -112,17 +140,17 @@ F:\Toperion Optimization\
 ├── settings.gradle.kts              # Stonecutter root; version matrix + mapBuilds
 ├── stonecutter.gradle.kts           # root build script; `buildAll` aggregate task
 ├── gradle.properties                # mod metadata + shared dep versions
-├── src/main/java/dev/hyperionfps/   # SHARED source — compiles on all 5 versions (64 files)
+├── src/main/java/dev/hyperionfps/   # SHARED source — compiles on all 5 versions (66 files)
 ├── src/main/resources/              # fabric.mod.json + thorium.mixins.json (Gradle templates)
-├── src/test/java/dev/hyperionfps/   # SHARED tests — JUnit 5 (28 classes / 117 tests)
+├── src/test/java/dev/hyperionfps/   # SHARED tests — JUnit 5 (30 classes / 130 tests)
 ├── versions/<mc>/
 │   ├── build.gradle.kts             # per-node plugin + template values
 │   ├── gradle.properties            # deps.minecraft, mod.mc_range
-│   └── src/main/java/dev/hyperionfps/   # VERSION-SPECIFIC source (19–21 files)
+│   └── src/main/java/dev/hyperionfps/   # VERSION-SPECIFIC source (20–22 files)
 │       ├── mixin/legacy/*  or  mixin/modern/*
 │       ├── gui/ThoriumVideoSettingsScreen.java
 │       └── gui/ThoriumModernHudRenderer.java  (modern only)
-└── net/                             # decompile reference (gitignored)
+└── net/                             # stale partial decompile (gitignored) — use javap, see §2a
 ```
 
 **The shared/version split is the single most important structural fact.**
@@ -142,6 +170,27 @@ F:\Toperion Optimization\
 | A mixin targeting a version-specific method | `versions/<mc>/src/main/java/dev/hyperionfps/mixin/{legacy,modern}/` |
 | A test for a shared class | `src/test/java/dev/hyperionfps/<pkg>/` |
 | A new subsystem | New subpackage of `dev.hyperionfps` + a matching test package |
+
+### The shared source's Minecraft API surface is deliberately tiny
+
+`src/main/java/` may only import these Minecraft types (verified by the current tree):
+`Minecraft`, `Options`, `Frustum`, `SoundInstance`, `BlockPos`, `Component`,
+`SoundSource`, `Entity`, `Player`, `BlockEntity`, `BlockState`, `BlockGetter`, `AABB`.
+
+**Traps inside that surface** — these compile on one era and not the other:
+
+| API | 1.21.1 | 1.21.11 | 26.1 | 26.2 | 26.3 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Player message | `displayClientMessage(C, boolean)` | `displayClientMessage(C, boolean)` | `sendOverlayMessage(C)` | `sendOverlayMessage(C)` | `sendOverlayMessage(C)` |
+| Open a URL | `net.minecraft.Util` | `net.minecraft.util.Util` | `net.minecraft.util.Util` | `net.minecraft.util.Util` | `Blaze3D.openUri(URI)` |
+| Current screen | `Minecraft#screen` (field) | `Minecraft#screen` (field) | `Minecraft#screen` (field) | `Minecraft#gui.screen()` | `Minecraft#gui.screen()` |
+| Set the screen | `Minecraft#setScreen` | `Minecraft#setScreen` | `setScreen` + `setScreenAndShow` | `setScreenAndShow` | `setScreenAndShow` |
+| Keyboard input | GLFW callbacks | GLFW callbacks | `KeyboardHandler#keyPress` | `KeyboardHandler#keyPress` | `KeyboardHandler#keyPress` |
+| Swap interval | `GLFW.glfwSwapInterval` | `GLFW.glfwSwapInterval` | `SDL_GL_SetSwapInterval` | `SDL_GL_SetSwapInterval` | `SDL_GL_SetSwapInterval` |
+
+So: **never send a player message, open a URL, or read the current screen from shared
+code.** The method was renamed or moved between eras. Put it in a per-version class, or
+go through the `VersionBridge`.
 
 ---
 
@@ -213,7 +262,7 @@ version-dependent engine behaviour. It exposes four sub-bridges:
 
 | Sub-bridge | Covers |
 | :--- | :--- |
-| `WindowContext` | GLFW swap interval, window handle, framebuffer size, raw FPS limit |
+| `WindowContext` | GLFW/SDL swap interval, window handle, framebuffer size, raw FPS limit |
 | `RenderBridge` | batching support, render distance, Extreme FPS mode |
 | `EntityBridge` | entity/block-entity/particle culling queries, dynamic distance scale |
 | `MathBridge` | fast `sin`/`cos`/`atan2`/`invSqrt`/`sqrt` |
@@ -259,6 +308,7 @@ this is a regression in the product.
 | **Use daemon threads** | All background workers are daemon threads with a `try/catch` around the loop body and an `interrupt` check. |
 | **Cache with bounded maps** | `ConcurrentHashMap` with a fixed initial capacity and an explicit eviction path when it grows. |
 | **No `synchronized` on the render thread** | Prefer `volatile` snapshots or atomics. The render thread must never block. |
+| **No `String.format` on the render thread** | The HUD formats four floats per frame; `String.format` allocates a `Formatter` + `StringBuilder` + `String` each time. Format by hand. |
 
 ### Known telemetry counters (use these, don't add new ad-hoc ones)
 
@@ -327,6 +377,9 @@ within a single frame.
   semantics, null-safety, buffer accounting and version parsing. Anything that needs a
   live Minecraft class cannot be unit tested here; keep that logic behind the
   `VersionBridge` so it *can* be tested.
+* The shared singletons (`AdaptiveDistanceController`, `AsyncOcclusionCuller`, …) are
+  process-wide. A test that mutates one must restore it, or the next test class in the
+  same JVM inherits the state.
 
 ### Test seams that exist for this purpose
 
@@ -336,6 +389,7 @@ within a single frame.
 | `IdleJanitor.sweepOnce(long budgetNanos)` | Test the sweep synchronously |
 | `DirectBufferPool(name, minShift, maxShift, perClassLimit)` | Test small pools without allocating MiB |
 | `GameVersionDetector` honours `-Dhyperionfps.gameVersion=` | Test version parsing/era routing |
+| `AdaptiveDistanceController#checkAndAdjust(long now)` | Test the governor without a game — it takes the clock as a parameter |
 
 **When you add a subsystem, add a test class with it.** A new subsystem without tests
 is an incomplete change.
@@ -356,7 +410,8 @@ is an incomplete change.
    the atomic file write, the lenient parser and the default fallbacks. Adding a new
    user-facing toggle means adding a key constant, an entry in `captureFromSubsystems()`
    and an entry in `applyToSubsystems()` — all three, or the setting will not survive
-   a restart.
+   a restart. **A new user-facing toggle also needs a row in the settings console of
+   all five `ThoriumVideoSettingsScreen` files.**
 5. **`TelemetryGate.allowed()` always returns `false`.** Telemetry is hard-disabled by
    policy, not by config. Do not add a "user consent" path without an explicit request.
 6. **`OffHeap` uses `sun.misc.Unsafe.invokeCleaner`** and prints a JDK deprecation
@@ -371,9 +426,36 @@ is an incomplete change.
 9. **`sun.misc.Unsafe` / `ProcessHandle` / `LockSupport.parkNanos`** are all used. Keep
    them off the render thread's critical path, and never let them escape an unguarded
    `try`/`catch` in a startup path.
-10. **The `net/` directory is a decompile reference and is gitignored.** Use it to look
-    up Minecraft internals; never edit it.
-11. **A dead mixin target fails SILENTLY.** Because of `defaultRequire: 0`, an injection
+10. **The `net/` directory is a stale partial decompile and is gitignored.** Use
+    `javap` on the Loom cache jars instead — see §2a.
+11. **Never write `Options#renderDistance` (or `Options#serverRenderDistance`) at
+    runtime.** This is the trap that shipped a world that reloaded itself every two
+    seconds:
+    * `Options#renderDistance` is **not** a client-local value. On a single-player
+      world the integrated server polls it on **every server tick**
+      (`IntegratedServer#tickServer` → `PlayerList#setViewDistance`).
+    * `PlayerList#setViewDistance` broadcasts a `ClientboundSetChunkCacheRadiusPacket`
+      and rebuilds the server chunk-tracking radius.
+    * The client answers that packet with `ClientChunkCache#updateViewRadius`, which
+      allocates a **new** `ClientChunkCache.Storage` — throwing away *every* cached
+      chunk, not just the ones outside the new radius. The entire visible world is
+      re-downloaded and re-meshed, which on 26.x (no chunk-upload pacer) is a multi-
+      frame hitch.
+    * `Options#serverRenderDistance` is **owned by the server**; it arrives from
+      `ClientboundSetChunkCacheRadiusPacket`. A client that writes it desynchronises
+      the fog distance and the far plane from what the server actually sends.
+    * Consequence for design: the adaptive render distance may only ever *lower* the
+      distance, at most once per settle window, and it is opt-in
+      (`adaptive.distance.enabled` defaults to `false`).
+12. **Never re-implement a vanilla game loop.** The particle ticking loop was
+    re-implemented once and the re-implementation skipped vanilla's particle-limit
+    bookkeeping, which permanently stopped the engine from creating particles. If you
+    want to change *when* work happens, hook it — do not replace the loop.
+13. **Do not promise what the code does not do.** Every console switch must change
+    observable behaviour on the version it runs on. A switch that cannot work is
+    shown as *not wired* / *not available*, and the startup log names it under
+    `UNWIRED` (see `ThoriumSubsystemReport`).
+14. **A dead mixin target fails SILENTLY.** Because of `defaultRequire: 0`, an injection
     whose target method no longer exists is a no-op at runtime — no crash, no warning
     on the 26.x nodes. This already shipped twice: `ParticleEngineMixin`'s
     `tickParticleList` target existed on **1.21.1 only** and was inert on 1.21.11 and
@@ -388,14 +470,20 @@ is an incomplete change.
     Loom's remapper prints `Cannot remap <method> because it does not exist` for the
     remap nodes only (1.21.1, 1.21.11) — treat that warning as a build failure, not
     noise. See `state.md` G-2 and G-12.
-12. **Never re-implement a vanilla game loop.** The particle ticking loop was
-    re-implemented once and the re-implementation skipped vanilla's particle-limit
-    bookkeeping, which permanently stopped the engine from creating particles. If you
-    want to change *when* work happens, hook it — do not replace the loop.
-13. **Do not promise what the code does not do.** Every console switch must change
-    observable behaviour on the version it runs on. A switch that cannot work is
-    shown as *not wired* / *not available*, and the startup log names it under
-    `UNWIRED` (see `ThoriumSubsystemReport`).
+15. **`versions/*/logs/latest.log` contains JUnit output, not a game log.** A real
+    client log lives in the Minecraft instance's own `logs/latest.log`. Do not read the
+    version-node logs as evidence about in-game behaviour.
+16. **`Minecraft#execute(Runnable)` runs the task INLINE on the game thread.** It is
+    *not* a "do this next tick" helper: `BlockableEventLoop#scheduleExecutables()`
+    returns `!isSameThread()`, so on the game thread `execute` falls through to
+    `runnable.run()` immediately. Never use it to defer a screen switch — you would
+    switch the screen from inside the screen's own constructor/init.
+    **Switch screens from a `tick()` hook instead**: `TitleScreen#tick()` is called by
+    the game loop (`Gui#tick()` on 26.x, `Minecraft#runTick` on 1.21.x) and is declared
+    on `TitleScreen` itself, so the injection cannot leak into other screens.
+17. **A config read is `synchronized`.** `ThoriumConfig#getBoolean` takes a lock, so
+    never call it from a per-frame hook. Cache the decision in a field when the screen
+    is built and read the field in the tick hook.
 
 ### Safe mode — the emergency escape hatch
 

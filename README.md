@@ -71,6 +71,9 @@ Track your gameplay fluidity in real time with an ultra-clean, frosted-glass tel
 * Detects a competing renderer (Sodium, Embeddium, Rubidium, Magnesium, Lithium, Oclite) and **stands down** the overlapping culling subsystems so the two never fight over visibility. Can be turned off in *Advanced → Auto-Yield to Sodium*.
 * Detects a shader pack (Iris, Oculus, OptiFine) and **disables** the fast-math overrides, because shader packs depend on the exact precision of vanilla's maths.
 
+### 8. 💬 Community
+* A single, dismissible invite card appears on the main menu the **first** time you launch the game — and never again. The link stays available forever in *Settings → General → Community Discord*, and the prompt can be switched off entirely there.
+
 ---
 
 ## 🗺️ Per-version feature matrix
@@ -90,6 +93,12 @@ Track your gameplay fluidity in real time with an ultra-clean, frosted-glass tel
 | Particle sheet batching | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 
 `✅` = live in-game · `⬜` = not available on that version (the console says so).
+
+> **Adaptive render distance is opt-in** (*Settings → Advanced → Adaptive Render
+> Distance*). It lowers the render distance when the framerate falls below target, and
+> never raises it on its own: changing the render distance makes Minecraft re-download
+> the whole chunk cache, so raising it automatically would reload the world every few
+> seconds.
 
 The startup log prints the same information for the running session, so you can always
 see what Thorium actually did:

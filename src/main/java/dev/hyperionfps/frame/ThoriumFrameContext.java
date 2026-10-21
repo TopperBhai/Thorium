@@ -36,6 +36,19 @@ import net.minecraft.world.level.BlockGetter;
  */
 public final class ThoriumFrameContext {
 
+    /**
+     * How long the adaptive render-distance governor stays dormant after a world has
+     * started rendering.
+     *
+     * <p>Loading a world is the single most expensive moment in a session: the client
+     * streams in chunks, rebuilds the section meshes and stalls for hundreds of
+     * milliseconds. The framerate during that window is low for a reason that has
+     * nothing to do with the render distance, so the governor must not react to it -
+     * a reaction here would cost a full chunk-cache reload right when the world is
+     * still settling.</p>
+     */
+    public static final long ADAPTIVE_WARMUP_NANOS = 10_000_000_000L;
+
     private static final AtomicLong CLIENT_FRAMES = new AtomicLong();
     private static final AtomicLong WORLD_FRAMES = new AtomicLong();
 
@@ -43,6 +56,12 @@ public final class ThoriumFrameContext {
     private static volatile long lastWorldFrameNanos = System.nanoTime();
     private static volatile long lastClientDeltaNanos = 0L;
     private static volatile long lastWorldDeltaNanos = 0L;
+
+    /** Timestamp of the first world frame of the current world. */
+    private static volatile long firstWorldFrameNanos = 0L;
+
+    /** The world the published camera context belongs to. */
+    private static volatile BlockGetter currentLevel;
 
     private ThoriumFrameContext() {
     }
@@ -86,6 +105,15 @@ public final class ThoriumFrameContext {
         lastWorldDeltaNanos = deltaNanos;
         WORLD_FRAMES.incrementAndGet();
 
+        // A different world (or a world that was left and re-entered) restarts the
+        // warm-up window: the first seconds of a new world are the most expensive
+        // ones and the least representative. A null level (no world at all) must not
+        // reset it, otherwise the window could never expire.
+        if (level != null && level != currentLevel) {
+            currentLevel = level;
+            firstWorldFrameNanos = now;
+        }
+
         AsyncOcclusionCuller.publishCamera(camX, camY, camZ, level);
         OcclusionGrid.onCameraUpdate(camX, camY, camZ);
         if (frustum != null) {
@@ -99,7 +127,9 @@ public final class ThoriumFrameContext {
         AsyncOcclusionCuller.updateDynamicDistanceScale(deltaNanos);
         AdaptiveDistanceController.getInstance().onFrame(deltaNanos);
         RenderDistanceGovernor.pollUserOverride();
-        if (!RenderDistanceGovernor.isUserOverrideActive()) {
+        if (firstWorldFrameNanos != 0L
+                && now - firstWorldFrameNanos >= ADAPTIVE_WARMUP_NANOS
+                && !RenderDistanceGovernor.isUserOverrideActive()) {
             AdaptiveDistanceController.getInstance().checkAndAdjust(System.currentTimeMillis());
         }
 

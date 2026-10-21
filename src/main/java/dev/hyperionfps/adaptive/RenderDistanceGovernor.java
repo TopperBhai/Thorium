@@ -17,6 +17,22 @@ import net.minecraft.client.Options;
  * <p>The governor must never fight the player. If the render distance is changed by
  * hand in the vanilla video settings, the governor yields for
  * {@link #USER_OVERRIDE_MILLIS} and re-syncs its own state with the new value.</p>
+ *
+ * <h2>What this class must never do</h2>
+ *
+ * <ul>
+ *   <li><b>Never write {@code Options#serverRenderDistance}.</b> That field is owned by
+ *       the server: it is set from the {@code ClientboundSetChunkCacheRadiusPacket}
+ *       the server sends, and it describes how many chunks the server is actually
+ *       sending. Writing it from the client overwrites the server's value with a
+ *       client-side guess, which desynchronises the fog distance and the far plane
+ *       from what the server actually delivers.</li>
+ *   <li><b>Never change the distance while the world is still loading.</b> The
+ *       integrated server of a single-player world polls {@code Options#renderDistance}
+ *       on every server tick; any change it sees is mirrored into the player list's
+ *       view distance, which makes the client drop and re-download its entire chunk
+ *       cache.</li>
+ * </ul>
  */
 public final class RenderDistanceGovernor {
 
@@ -42,17 +58,25 @@ public final class RenderDistanceGovernor {
         }
     }
 
-    /** Applies a new render distance to the game options. */
+    /**
+     * Applies a new render distance to the game options.
+     *
+     * <p>Only the client's own option is written. The server-side radius is left
+     * untouched - the server tells the client what it is sending through
+     * {@code ClientboundSetChunkCacheRadiusPacket}.</p>
+     */
     private static void apply(int distance) {
         try {
             Minecraft client = Minecraft.getInstance();
-            if (client == null || client.options == null || client.level == null) {
+            if (client == null || client.options == null) {
                 return;
             }
             client.options.renderDistance().set(distance);
-            client.options.setServerRenderDistance(client.options.getEffectiveRenderDistance());
-            lastKnownDistance = distance;
-            LOGGER.info("Adaptive render distance applied: {} chunks", distance);
+            // The option clamps to its own valid range, so the value that actually
+            // took effect is read back instead of assuming the requested one stuck.
+            int applied = client.options.renderDistance().get();
+            lastKnownDistance = applied;
+            LOGGER.info("Adaptive render distance applied: {} chunks", applied);
         } catch (Throwable failure) {
             LOGGER.warn("Could not apply adaptive render distance: {}", failure.toString());
         }

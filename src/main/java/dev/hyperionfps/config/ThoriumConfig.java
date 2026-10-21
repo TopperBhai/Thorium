@@ -101,6 +101,12 @@ public final class ThoriumConfig {
     /** Whether the fast-math overrides of {@code Mth} may run. */
     public static final String KEY_FAST_MATH = "math.fast.enabled";
 
+    /** Whether the one-time community invite may be shown on the first launch. */
+    public static final String KEY_DISCORD_INVITE_ENABLED = "discord.invite.enabled";
+
+    /** Whether the one-time community invite has already been offered. */
+    public static final String KEY_DISCORD_INVITE_SHOWN = "discord.invite.shown";
+
     private static final Logger LOGGER = LoggerFactory.getLogger("Thorium/Config");
 
     private static volatile ThoriumConfig instance;
@@ -316,7 +322,11 @@ public final class ThoriumConfig {
         run("particle batcher", () -> ParticleBatchEngine.getInstance().setEnabled(getBoolean(KEY_PARTICLE_BATCHER, true)));
         run("entity instancer", () -> EntityInstancer.getInstance().setEnabled(getBoolean(KEY_ENTITY_INSTANCER, true)));
         run("light engine", () -> AsyncLightEngine.getInstance().setEnabled(getBoolean(KEY_LIGHT_ENGINE, true)));
-        run("adaptive distance", () -> AdaptiveDistanceController.getInstance().setEnabled(getBoolean(KEY_ADAPTIVE_DISTANCE, true)));
+        // Opt-in: the governor rewrites a vanilla option, and in single-player that
+        // option is mirrored by the integrated server into the player list's view
+        // distance, which makes the client drop and re-download its whole chunk cache.
+        // It therefore has to be something the player turns on knowingly.
+        run("adaptive distance", () -> AdaptiveDistanceController.getInstance().setEnabled(getBoolean(KEY_ADAPTIVE_DISTANCE, false)));
         run("fast math", () -> ThoriumCompatibility.setFastMathEnabled(getBoolean(KEY_FAST_MATH, false)));
 
         LOGGER.info("Applied persisted Thorium settings (preset={}, hud={}, extremeFps={})",

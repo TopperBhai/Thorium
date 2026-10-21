@@ -17,12 +17,12 @@
 | :--- | :--- | :--- |
 | Core subsystems | 🟢 Complete | All 18 packages implemented with metrics and toggles |
 | Multi-version build | 🟢 Complete | 5 nodes, shared source tree, era-routed mixins |
-| Unit tests | 🟢 Green | 117 tests / 28 classes, 0 failures on all five nodes |
+| Unit tests | 🟢 Green | 130 tests / 30 classes, 0 failures on all five nodes |
 | Build | 🟢 Green | `buildAll` produces 5 jars |
 | Mixin target audit | 🟢 Fixed | A dead mixin target now **fails the build** (G-12) |
 | Frame context | 🟢 Fixed | One authoritative per-frame publisher on all five nodes (A-3) |
 | Frame pacer | 🟢 Fixed | `ThoriumFramePacer.paceFrame()` is wired to `Minecraft#runTick` (A-1) |
-| Adaptive render distance | 🟢 Fixed | Wired to the game's own render-distance option (A-2) |
+| Adaptive render distance | 🟢 Fixed | Opt-in, load-shedding only — it no longer reloads the world every two seconds (G-14) |
 | Particle ticking | 🟢 Resolved | The broken re-implementation of vanilla's tick loop is gone (G-2/G-3) |
 | Frame pacing on 26.2 | 🟢 Fixed | `Window#updateVsync` never existed on 26.2 — re-targeted (new) |
 | Settings persistence | 🟢 Fixed | `ThoriumConfig` writes `thorium-config.json` atomically; presets and toggles survive a restart (was G-1) |
@@ -48,19 +48,19 @@ but not yet connected to the game (see §4.2), plus the missing benchmark harnes
 | Command | Result |
 | :--- | :--- |
 | `./gradlew :26.3:compileJava` | ✅ `EXIT=0` |
-| `./gradlew :26.3:test` | ✅ `BUILD SUCCESSFUL` — 117 tests, 0 failures, 0 errors, 0 skipped |
-| `./gradlew test` | ✅ green on **all five** nodes (117 tests each) |
+| `./gradlew :26.3:test` | ✅ `BUILD SUCCESSFUL` — 130 tests, 0 failures, 0 errors, 0 skipped |
+| `./gradlew test` | ✅ green on **all five** nodes (130 tests each) |
 | `./gradlew buildAll` | ✅ `BUILD SUCCESSFUL` — 5 jars in `build/dist/` |
 
 Verified artifacts in `build/dist/`:
 
 | Jar | Size |
 | :--- | ---: |
-| `thorium-0.1.1+1.21.1.jar` | 198 943 B |
-| `thorium-0.1.1+1.21.11.jar` | 195 770 B |
-| `thorium-0.1.1+26.1.jar` | 194 027 B |
-| `thorium-0.1.1+26.2.jar` | 194 245 B |
-| `thorium-0.1.1+26.3.jar` | 194 191 B |
+| `thorium-0.1.1+1.21.1.jar` | 206 201 B |
+| `thorium-0.1.1+1.21.11.jar` | 203 010 B |
+| `thorium-0.1.1+26.1.jar` | 201 254 B |
+| `thorium-0.1.1+26.2.jar` | 201 472 B |
+| `thorium-0.1.1+26.3.jar` | 201 403 B |
 
 ### Build warnings observed
 
@@ -79,8 +79,8 @@ task** — only `:1.21.1` and `:1.21.11` do. Use `assemble` / `build` for the mo
 
 | Metric | Count |
 | :--- | ---: |
-| Shared main sources (`src/main/java`) | 64 files |
-| Shared test sources (`src/test/java`) | 28 classes / 117 tests |
+| Shared main sources (`src/main/java`) | 66 files |
+| Shared test sources (`src/test/java`) | 30 classes / 130 tests |
 | Version-specific sources | 19 files/node (26.x), 21 (1.21.1), 20 (1.21.11) |
 | Version nodes | 5 |
 | Git commits | 6 (this cycle's work is uncommitted) |
@@ -471,6 +471,54 @@ be excluded from templating explicitly.
 
 ---
 
+### G-14 ✅ RESOLVED — The world reloaded itself every two seconds (chunk-reload storm)
+
+**Reported symptom (26.3, single-player).** The whole visible world visibly reloaded
+every one to two seconds, and the Thorium HUD showed regular frametime spikes with a
+maximum of 84 ms.
+
+**Root cause.** A five-link chain, all of it inside Thorium's adaptive render-distance
+governor:
+
+1. `AdaptiveDistanceController#checkAndAdjust` raised the render distance by one chunk
+   whenever the smoothed framerate was more than 10 FPS above the 60 FPS target. On a
+   machine running at 140 FPS that condition is permanently true, so the distance was
+   ratcheted from 12 to the maximum of 32 — one step every two seconds, which is exactly
+   the `DEFAULT_ADJUST_INTERVAL_MS` of 2000 ms.
+2. Every step wrote `Options#renderDistance`. On a single-player world the integrated
+   server polls that very option on **every server tick** (`IntegratedServer#tickServer`
+   → `PlayerList#setViewDistance`).
+3. `PlayerList#setViewDistance` broadcasts a `ClientboundSetChunkCacheRadiusPacket` and
+   rebuilds the server chunk-tracking radius, so the server unloads and re-sends chunks.
+4. The client answers that packet with `ClientChunkCache#updateViewRadius`, which
+   allocates a **brand-new** `ClientChunkCache.Storage`. That throws away *every* cached
+   chunk — not only the ones that fell outside the new radius — so the entire visible
+   world is re-downloaded and re-meshed.
+5. The 26.x render pipeline has no chunk-upload pacer (it is a 1.21.x-only hook), so
+   the re-meshed sections are uploaded in one burst — the 84 ms spikes.
+
+**Fix.**
+
+| Change | File |
+| :--- | :--- |
+| The governor no longer raises the distance. It only sheds load. | `AdaptiveDistanceController` |
+| A change needs 2 consecutive low-framerate evaluations and is rate-limited by a 30 s settle window. | `AdaptiveDistanceController` |
+| The governor stays dormant for the first 10 s of a world, so the loading hitch can never trigger a reload. | `ThoriumFrameContext` |
+| The client no longer writes `Options#serverRenderDistance` — that field belongs to the server. | `RenderDistanceGovernor` |
+| The feature is **opt-in** (`adaptive.distance.enabled` now defaults to `false`) and is exposed as a switch in the settings console on all five versions. | `ThoriumConfig`, `ThoriumVideoSettingsScreen` (×5) |
+
+**Verification.** `./gradlew test` green on all five nodes (121 tests), `./gradlew
+buildAll` produces five jars. The governor is additionally covered by
+`AdaptiveDistanceTest`, which now asserts that a healthy framerate never raises the
+distance and that the settle window blocks a second change.
+
+**Note.** An existing `thorium-config.json` may still contain
+`"adaptive.distance.enabled": "true"` from an earlier version. That is harmless now —
+the governor no longer raises the distance — but the switch can be turned off in
+*Settings → Advanced → Adaptive Render Distance*.
+
+---
+
 ### 4.2 Subsystems that are implemented but not wired 🔴
 
 Seven subsystems are fully implemented, unit-tested and (in most cases) exposed in the
@@ -567,11 +615,16 @@ those versions.
 | **D-1** — Sodium coexistence | ✅ Competing renderers are detected; Thorium stands down |
 | **D-2** — fast-math safety | ✅ Off by default, disabled under a shader pack, no more double→float truncation |
 | New — 26.2 frame pacing | ✅ `Window#updateVsync` never existed on 26.2; re-targeted to `GpuSurface#configure` |
+| New — one-time community invite | ✅ A single dismissible card on the main menu, never repeated, with a permanent link in the settings console |
+| New — settings console layout | ✅ The rows scroll inside the band above the footer bar, so every row stays reachable on a short window (REQ-UI-9) |
+| New — Nuclear preset fast math | ✅ The preset no longer switches fast math back off right after switching it on |
 | Android launch crash | ✅ Mitigated — safe-mode kill switch + 3 native-call guards |
 ## 7. Changelog
 
 | Commit | Date | Change |
 | :--- | :--- | :--- |
+| *(uncommitted)* | 2026-10-21 | Settings console: the row list scrolls inside the band above the footer bar so no row is drawn over the footer on a short window (all five nodes); the Nuclear preset keeps fast math enabled; the one-time invite is recorded as shown when the card opens. |
+| *(uncommitted)* | 2026-10-21 | Fixed the world-wide chunk-reload storm (G-14): the adaptive render distance no longer raises the distance, is opt-in and rate-limited. Added the one-time community invite. |
 | *(uncommitted)* | 2026-10-21 | v0.2 groundwork: mixin target audit, frame context, frame pacer, adaptive distance, particle budget, compatibility probe, honest subsystem report, documentation pass |
 | `948ec68` | 2026-10-20 | Restart & launch crash solved: safe mode, atomic settings persistence, hotkey parity |
 | `3782c32` | 2026-10-20 | Bump version to 0.1.1; isolate per-version metadata |

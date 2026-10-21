@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
 class AdaptiveDistanceTest {
 
     private AdaptiveDistanceController controller;
+    private AtomicInteger reportedDistance;
+    private long now;
 
     @BeforeEach
     void setUp() {
@@ -22,6 +24,9 @@ class AdaptiveDistanceTest {
         controller.setMaxDistance(32);
         controller.setCurrentDistance(12);
         controller.reset();
+        reportedDistance = new AtomicInteger(-1);
+        controller.setDistanceConsumer(reportedDistance::set);
+        now = System.currentTimeMillis();
     }
 
     @Test
@@ -50,69 +55,86 @@ class AdaptiveDistanceTest {
     }
 
     @Test
-    void testAdaptiveDistanceStepDownOnLowFps() {
-        AtomicInteger reportedDistance = new AtomicInteger(-1);
-        controller.setDistanceConsumer(reportedDistance::set);
-
-        // Simulate severely low FPS (e.g. 30 FPS when target is 60)
+    void testStepDownNeedsTwoConsecutiveLowSamples() {
         controller.setSmoothedFps(30.0);
 
-        long now = System.currentTimeMillis();
-        // Cooldown initially prevents immediate adjustment if within interval
-        // Wait or simulate time passage: now + 3000ms
-        boolean adjusted = controller.checkAndAdjust(now + 3000L);
-        assertTrue(adjusted);
+        // First low sample only arms the governor.
+        assertFalse(controller.checkAndAdjust(now + 3000L));
+        assertEquals(12, controller.getCurrentDistance());
+
+        // The second consecutive low sample applies the change.
+        assertTrue(controller.checkAndAdjust(now + 6000L));
         assertEquals(11, controller.getCurrentDistance());
         assertEquals(11, reportedDistance.get());
         assertEquals(1, controller.getAdjustmentsMade());
     }
 
     @Test
-    void testAdaptiveDistanceStepUpOnHighFps() {
-        AtomicInteger reportedDistance = new AtomicInteger(-1);
-        controller.setDistanceConsumer(reportedDistance::set);
+    void testHighFramerateNeverRaisesTheDistance() {
+        controller.setSmoothedFps(240.0);
 
-        // Simulate high FPS headroom (e.g. 100 FPS when target is 60)
-        controller.setSmoothedFps(100.0);
-
-        long now = System.currentTimeMillis();
-        boolean adjusted = controller.checkAndAdjust(now + 3000L);
-        assertTrue(adjusted);
-        assertEquals(13, controller.getCurrentDistance());
-        assertEquals(13, reportedDistance.get());
-        assertEquals(1, controller.getAdjustmentsMade());
+        // A fast machine is the normal case: the governor must not chase more chunks,
+        // because every distance change reloads the whole chunk cache.
+        for (int i = 1; i <= 10; i++) {
+            assertFalse(controller.checkAndAdjust(now + (i * 3000L)));
+        }
+        assertEquals(12, controller.getCurrentDistance());
+        assertEquals(-1, reportedDistance.get());
+        assertEquals(0, controller.getAdjustmentsMade());
     }
 
     @Test
-    void testDistanceClampedToMinAndMax() {
+    void testDistanceIsNeverLoweredBelowTheMinimum() {
         controller.setCurrentDistance(4);
         controller.setSmoothedFps(20.0);
 
-        // Should not drop below minDistance (4)
-        boolean adjusted = controller.checkAndAdjust(System.currentTimeMillis() + 3000L);
-        assertFalse(adjusted);
+        assertFalse(controller.checkAndAdjust(now + 3000L));
+        assertFalse(controller.checkAndAdjust(now + 6000L));
         assertEquals(4, controller.getCurrentDistance());
-
-        controller.setCurrentDistance(32);
-        controller.setSmoothedFps(200.0);
-
-        // Should not rise above maxDistance (32)
-        adjusted = controller.checkAndAdjust(System.currentTimeMillis() + 6000L);
-        assertFalse(adjusted);
-        assertEquals(32, controller.getCurrentDistance());
+        assertEquals(-1, reportedDistance.get());
     }
 
     @Test
-    void testCooldownPreventsExcessiveHitching() {
+    void testSettleWindowBlocksASecondChange() {
         controller.setSmoothedFps(25.0);
-        long now = System.currentTimeMillis();
 
-        // First adjust succeeds after interval
-        assertTrue(controller.checkAndAdjust(now + 2500L));
+        // Two low samples: the change is applied.
+        controller.checkAndAdjust(now + 3000L);
+        assertTrue(controller.checkAndAdjust(now + 6000L));
         assertEquals(11, controller.getCurrentDistance());
 
-        // Immediately checking 500ms later must be blocked by cooldown
+        // The world needs time to reload: no further change inside the settle window.
+        assertFalse(controller.checkAndAdjust(now + 9000L));
+        assertFalse(controller.checkAndAdjust(now + 12000L));
+        assertEquals(11, controller.getCurrentDistance());
+        assertEquals(1, controller.getAdjustmentsMade());
+
+        // After the settle window the governor may act again - but it still needs two
+        // consecutive low samples, because the blocked evaluations reset the counter.
+        assertFalse(controller.checkAndAdjust(now + 33000L));
+        assertFalse(controller.checkAndAdjust(now + 36000L));
+        assertTrue(controller.checkAndAdjust(now + 39000L));
+        assertEquals(10, controller.getCurrentDistance());
+        assertEquals(2, controller.getAdjustmentsMade());
+    }
+
+    @Test
+    void testEvaluationIntervalIsRespected() {
+        controller.setSmoothedFps(25.0);
+
+        // Too soon after the last evaluation: nothing happens.
+        assertFalse(controller.checkAndAdjust(now + 500L));
+        assertEquals(12, controller.getCurrentDistance());
+    }
+
+    @Test
+    void testDisabledGovernorDoesNothing() {
+        controller.setEnabled(false);
+        controller.setSmoothedFps(10.0);
+
         assertFalse(controller.checkAndAdjust(now + 3000L));
-        assertEquals(11, controller.getCurrentDistance());
+        assertFalse(controller.checkAndAdjust(now + 6000L));
+        assertEquals(12, controller.getCurrentDistance());
+        assertEquals(-1, reportedDistance.get());
     }
 }
