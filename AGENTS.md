@@ -34,6 +34,11 @@ It is the operational contract. For *what* the product is supposed to do, read
 7. **Never write a vanilla option that the server also owns** — most importantly
    `Options#renderDistance`. See §10.11; it is the single most expensive mistake this
    codebase has made.
+8. **Small atomic steps & mandatory markdown synchronization.** Break large features
+   into 5–10 small, verifiable steps (tracked in [`TODO.md`](./TODO.md)). **After every
+   single step**, run the test gate and update all core docs: `TODO.md`, `spec.md`,
+   `state.md`, and `AGENTS.md`. A new AI session must be able to resume immediately
+   without re-deriving context or guessing what is done.
 
 ---
 
@@ -44,7 +49,7 @@ All commands are run **from the repository root** and use the bundled Gradle wra
 | Goal | Command | Notes |
 | :--- | :--- | :--- |
 | Build every version | `./gradlew buildAll` | Aggregates `assemble` for all 5 nodes → `build/dist/*.jar`. Excludes `-sources.jar` / `-dev.jar`. |
-| Build one version | `./gradlew :26.3:build` | Jar lands in `versions/26.3/build/libs/thorium-0.1.1+26.3.jar` |
+| Build one version | `./gradlew :26.3:build` | Jar lands in `versions/26.3/build/libs/thorium-0.1.2+26.3.jar` |
 | Run tests (one version) | `./gradlew :26.3:test` | **The gate.** 130 tests / 30 classes. |
 | Run tests (all versions) | `./gradlew test` | Same shared test tree compiles into every node. |
 | Run **one** test class | `./gradlew :26.3:test --tests "dev.hyperionfps.adaptive.AdaptiveDistanceTest"` | Fastest way to iterate on a single subsystem. |
@@ -290,6 +295,39 @@ Engine API differences belong in a mixin (era-specific) or behind the bridge
   logger with a topic suffix (e.g. `"HyperionFPS/MixinRouter"`).
 * Formatting: 4-space indent, no tabs, ~120 column soft limit.
 
+### 6a. The settings console has exactly one copy of every row ⚠️ read before adding a switch
+
+The console exists in five per-version classes (`ThoriumVideoSettingsScreen`) because
+the widget and rendering APIs differ between the legacy and the modern era. The
+**rows** do not differ, so they live in shared code:
+
+| Concern | Owner |
+| :--- | :--- |
+| A row's title, status, click handler, description, badge | `dev.hyperionfps.gui.ThoriumSettingRows` |
+| A hardware preset's full profile | `dev.hyperionfps.config.ThoriumPresets` |
+| A headline feature's persisted switch | `dev.hyperionfps.core.ThoriumFeatureToggles` |
+| The widget, the scrolling and the drawing | the per-version screen |
+
+**Therefore: never add a settings row to a `versions/<mc>/...ThoriumVideoSettingsScreen.java`
+file.** Add it to `ThoriumSettingRows` and it appears on all five nodes at once. The
+only things a per-version screen may still vary are the widget type, the drawing and
+the two genuinely version-specific actions (the browser hand-off for the community
+invite and the chunk-upload-pacer availability).
+
+### 6b. Headline features: one switch, one owner
+
+The eight "headline" features (REQ-HEAD-1 … REQ-HEAD-9) are delivered one step at a
+time, so their **configuration** lives in `ThoriumFeatureToggles`:
+
+* The switch itself lives in `ThoriumFeatureToggles.Feature` — never in the feature's
+  subsystem class. A subsystem *reads* the registry; it does not keep a second flag.
+* A feature calls `ThoriumFeatureToggles.Feature.X.markWired()` once it has a live
+  call site. Until then the console shows `NOT AVAILABLE` and the startup report
+  shows `UNWIRED` — a switch that cannot do anything must never look like one
+  (REQ-UI-2).
+* A new user-facing switch still needs all three places: the key constant, an entry in
+  `captureFromSubsystems()` and an entry in `applyToSubsystems()` (§10.4).
+
 ---
 
 ## 7. Performance invariants (the reason this project exists)
@@ -504,9 +542,9 @@ exposed as a toggle in the settings console (Advanced tab).
 
 ## 11. Where to record work
 
+* Track **tasks, steps, and execution status** → update [`TODO.md`](./TODO.md).
 * Change **behaviour** or **architecture** → update [`spec.md`](./spec.md).
 * Change **status, add a subsystem, fix a gap** → update [`state.md`](./state.md).
-* Change **how to build / where code lives / conventions** → update this file.
+* Change **how to build / where code lives / conventions** → update this file (`AGENTS.md`).
 
-Keep all three in the repository root and commit them together with the change they
-describe.
+Keep all four in the repository root and update them after **every completed step**.

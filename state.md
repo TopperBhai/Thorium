@@ -3,7 +3,7 @@
 **Project:** Thorium (`thorium` / Th-90) — Minecraft client-side optimization mod
 **Repo:** `https://github.com/TopperBhai/Thorium` · **Local:** `F:\Toperion Optimization`
 **Branch:** `main` · **HEAD:** `948ec68` (+ uncommitted v0.2 groundwork) · **Working tree:** modified
-**Mod version:** 0.1.1 · **Last verified:** 2026-10-21
+**Mod version:** 0.1.2 · **Last verified:** 2026-10-21
 
 > This document is the **status board**. It records what is built, what is verified, what
 > is broken or missing, and what to do next. Requirements → [`spec.md`](./spec.md).
@@ -31,6 +31,8 @@
 | Mod coexistence | 🟢 Fixed | Sodium/Embeddium and shader packs are detected; Thorium stands down (D-1/D-2) |
 | Startup log honesty | 🟢 Fixed | A live subsystem report replaces the hardcoded claims (A-13/D-4) |
 | Dead subsystems | 🔴 Open | 7 implemented subsystems still have **no call site** — see §4.2 |
+| Headline Innovation Plan | 🟡 In Progress | **Step 1 done** (config + settings matrix); Step 2 (AFK Eco) is next |
+| Settings console duplication | 🟢 Fixed | The rows and the presets live in shared code now — 5 screens, one catalogue |
 | Performance validation | 🟡 Unverified | No in-game benchmark harness or capture tooling (G-7) |
 | Release tagging | 🔴 Missing | No git tags for 0.1.1 (G-11) |
 
@@ -48,19 +50,19 @@ but not yet connected to the game (see §4.2), plus the missing benchmark harnes
 | Command | Result |
 | :--- | :--- |
 | `./gradlew :26.3:compileJava` | ✅ `EXIT=0` |
-| `./gradlew :26.3:test` | ✅ `BUILD SUCCESSFUL` — 130 tests, 0 failures, 0 errors, 0 skipped |
-| `./gradlew test` | ✅ green on **all five** nodes (130 tests each) |
+| `./gradlew :26.3:test` | ✅ `BUILD SUCCESSFUL` — **155 tests**, 0 failures, 0 errors, 0 skipped |
+| `./gradlew test` | ✅ green on **all five** nodes (155 tests each) |
 | `./gradlew buildAll` | ✅ `BUILD SUCCESSFUL` — 5 jars in `build/dist/` |
 
 Verified artifacts in `build/dist/`:
 
 | Jar | Size |
 | :--- | ---: |
-| `thorium-0.1.1+1.21.1.jar` | 206 201 B |
-| `thorium-0.1.1+1.21.11.jar` | 203 010 B |
-| `thorium-0.1.1+26.1.jar` | 201 254 B |
-| `thorium-0.1.1+26.2.jar` | 201 472 B |
-| `thorium-0.1.1+26.3.jar` | 201 403 B |
+| `thorium-0.1.2+1.21.1.jar` | 223 233 B |
+| `thorium-0.1.2+1.21.11.jar` | 220 056 B |
+| `thorium-0.1.2+26.1.jar` | 218 237 B |
+| `thorium-0.1.2+26.2.jar` | 218 455 B |
+| `thorium-0.1.2+26.3.jar` | 218 377 B |
 
 ### Build warnings observed
 
@@ -79,8 +81,8 @@ task** — only `:1.21.1` and `:1.21.11` do. Use `assemble` / `build` for the mo
 
 | Metric | Count |
 | :--- | ---: |
-| Shared main sources (`src/main/java`) | 66 files |
-| Shared test sources (`src/test/java`) | 30 classes / 130 tests |
+| Shared main sources (`src/main/java`) | 69 files |
+| Shared test sources (`src/test/java`) | 33 classes / 155 tests |
 | Version-specific sources | 19 files/node (26.x), 21 (1.21.1), 20 (1.21.11) |
 | Version nodes | 5 |
 | Git commits | 6 (this cycle's work is uncommitted) |
@@ -597,6 +599,23 @@ those versions.
 13. Add a release CI workflow that runs `buildAll`, `test` and the mixin audit on all
     five nodes.
 
+### Headline Innovation Roadmap (10 Small Atomic Steps)
+
+Organized in [`TODO.md`](./TODO.md) to deliver maximum player-facing value in concise, verifiable increments:
+
+| Step | Headline Feature | Scope | Status | Gate |
+| :--- | :--- | :--- | :--- | :--- |
+| **Step 1** | **Core Config & Settings Console Matrix** | 10 headline keys, presets, all 5 `ThoriumVideoSettingsScreen`s, Purge RAM button | ✅ **Done** | `ThoriumConfigTest` (155 tests), `test` (5/5), `buildAll` |
+| **Step 2** | **AFK Battery & Power Saver (Stealth AFK™)** | Inactivity / unfocused 10 FPS cap, CPU park, 0 ms wake | 🟡 **Next** | `AfkPowerSaverTest` |
+| **Step 3** | **Instant Lag Spike Alert (Nuclear Stutter Hunter™)** | 5-phase breakdown, GC pause listener, HUD toast | ⏳ Pending | `StutterHunterTest` |
+| **Step 4** | **Storage Room & Item Frame Culling** | Container & item frame occlusion and distance culling | ⏳ Pending | `StorageCullingTest` |
+| **Step 5** | **Mob Farm & Swarm Optimizer** | Dense swarm animation decoupling & sound dampening | ⏳ Pending | `MobFarmOptimizerTest` |
+| **Step 6** | **Explosion & Firework Shield** | Particle burst rate-limiting (TNT/fireworks) | ⏳ Pending | `ExplosionShieldTest` |
+| **Step 7** | **Elytra Flight Smoother & Modern Chunk Upload Parity** | Forward-cone upload prioritization & 26.x Blaze3D hook | ⏳ Pending | `ChunkUploadPacerTest` |
+| **Step 8** | **Ultra Low-Latency Reflex (Late Input Sampling)** | Tail-of-frame input sync to cut input-to-photon lag | ⏳ Pending | `ReflexInputTest` |
+| **Step 9** | **No-Lag Weather & Clean Water / Fast Fog** | Rain sheet simplification & underwater fog clamping | ⏳ Pending | `WeatherFogTest` |
+| **Step 10** | **Multi-Version Verification, Mixin Audit & Final Release** | Full 5-node test, buildAll, MixinTargetAuditTest | ⏳ Pending | `test` (5/5), `buildAll` |
+
 ### Completed in this cycle
 
 | Item | Status |
@@ -619,10 +638,12 @@ those versions.
 | New — settings console layout | ✅ The rows scroll inside the band above the footer bar, so every row stays reachable on a short window (REQ-UI-9) |
 | New — Nuclear preset fast math | ✅ The preset no longer switches fast math back off right after switching it on |
 | Android launch crash | ✅ Mitigated — safe-mode kill switch + 3 native-call guards |
+| **Roadmap Step 1** | ✅ Config + settings matrix — 10 headline keys persisted, shared `ThoriumFeatureToggles` registry, shared `ThoriumPresets`, shared `ThoriumSettingRows` catalogue rendered by all five screens |
 ## 7. Changelog
 
 | Commit | Date | Change |
 | :--- | :--- | :--- |
+| *(uncommitted)* | 2026-10-21 | **Roadmap Step 1** — the ten headline feature switches are persisted and wired three ways, the presets and the settings rows moved into shared code, and the console rows for the not-yet-implemented features report themselves as `NOT AVAILABLE` instead of pretending to work. |
 | *(uncommitted)* | 2026-10-21 | Settings console: the row list scrolls inside the band above the footer bar so no row is drawn over the footer on a short window (all five nodes); the Nuclear preset keeps fast math enabled; the one-time invite is recorded as shown when the card opens. |
 | *(uncommitted)* | 2026-10-21 | Fixed the world-wide chunk-reload storm (G-14): the adaptive render distance no longer raises the distance, is opt-in and rate-limited. Added the one-time community invite. |
 | *(uncommitted)* | 2026-10-21 | v0.2 groundwork: mixin target audit, frame context, frame pacer, adaptive distance, particle budget, compatibility probe, honest subsystem report, documentation pass |
@@ -640,6 +661,7 @@ those versions.
 
 | Date | Action |
 | :--- | :--- |
+| 2026-10-21 | **Roadmap Step 1 done** — `ThoriumFeatureToggles` (the shared registry of the eight headline switches, the AFK timeout and the weather mode), `ThoriumPresets` (the three hardware profiles, moved out of the five per-version screens) and `ThoriumSettingRows` (the shared row catalogue) are new shared classes. The five `ThoriumVideoSettingsScreen` files lost ~360 lines each and now only contain the era-specific widget and drawing code. The ten headline switches are persisted, wired three ways, and each has a console row that reports `NOT AVAILABLE` until its implementation lands. `ThoriumSubsystemReport` lists them as `UNWIRED` until then. The *Purge RAM Now* button now reports the measured amount instead of a fabricated 12 MB minimum. Test suite grew from 130 to **155 tests** across 33 classes; `buildAll` green on all five nodes. |
 | 2026-10-20 | `AGENTS.md`, `spec.md`, `state.md` created from a full codebase survey. Build (`:26.3:compileJava`), tests (`:26.3:test`, 79/79 green) and `buildAll` (5 jars) all verified. |
 | 2026-10-20 | Bytecode audit of `ParticleEngine` across all 5 Minecraft jars via `javap` found `tickParticleList` exists on **1.21.1 only** — the particle ticking injection is inert on 1.21.11/26.1/26.2/26.3 (G-2). Recorded as the P0 headline defect. |
 | 2026-10-20 | Corrected an initial misreading: `FramePacing.inBootPhase()` **is** wired into all five `*FramePacingMixin` files — no action needed. Recorded as a positive finding under G-12. |

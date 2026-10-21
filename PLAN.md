@@ -1,7 +1,7 @@
 # PLAN.md — Thorium v0.2 Roadmap
 
 **Project:** Thorium (`thorium` / Th-90) — Minecraft client-side performance mod
-**Base:** `main` @ `948ec68` · **Current version:** 0.1.1 · **Plan horizon:** v0.2 → v0.3
+**Base:** `main` @ `948ec68` · **Current version:** 0.1.2 · **Plan horizon:** v0.1.2 → v0.2
 **Companion docs:** [`spec.md`](./spec.md) (requirements) · [`state.md`](./state.md) (status) · [`AGENTS.md`](./AGENTS.md) (working rules)
 
 > **What this document is.** `spec.md` says *what Thorium must do*. `state.md` says

@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import dev.hyperionfps.adaptive.AdaptiveDistanceController;
+import dev.hyperionfps.core.ThoriumFeatureToggles;
 
 class ThoriumConfigTest {
 
@@ -160,5 +161,88 @@ class ThoriumConfigTest {
 
         assertFalse(AdaptiveDistanceController.getInstance().isEnabled(),
                 "the adaptive render distance rewrites a vanilla option and must be opt-in");
+    }
+
+    @Test
+    void theHeadlineFeaturesDefaultToEnabled(@TempDir Path dir) {
+        ThoriumConfig config = ThoriumConfig.forFile(dir.resolve("thorium-config.json"));
+        config.applyToSubsystems();
+
+        assertTrue(ThoriumFeatureToggles.isMobFarmEnabled());
+        assertTrue(ThoriumFeatureToggles.isStorageItemFramesEnabled());
+        assertTrue(ThoriumFeatureToggles.isElytraSmootherEnabled());
+        assertTrue(ThoriumFeatureToggles.isAfkEcoEnabled());
+        assertTrue(ThoriumFeatureToggles.isStutterAlertEnabled());
+        assertTrue(ThoriumFeatureToggles.isExplosionShieldEnabled());
+        assertTrue(ThoriumFeatureToggles.isReflexEnabled());
+        assertTrue(ThoriumFeatureToggles.isCleanWaterFogEnabled());
+        assertEquals(ThoriumFeatureToggles.WeatherMode.MINIMAL,
+                ThoriumFeatureToggles.getWeatherMode());
+        assertEquals(60, ThoriumFeatureToggles.getAfkTimeoutSeconds());
+    }
+
+    @Test
+    void theHeadlineFeaturesSurviveARestart(@TempDir Path dir) throws Exception {
+        Path file = dir.resolve("thorium-config.json");
+
+        ThoriumConfig first = ThoriumConfig.forFile(file);
+        ThoriumFeatureToggles.setMobFarmEnabled(false);
+        ThoriumFeatureToggles.setReflexEnabled(false);
+        ThoriumFeatureToggles.setWeatherMode(ThoriumFeatureToggles.WeatherMode.OFF);
+        ThoriumFeatureToggles.setAfkTimeoutSeconds(120);
+        first.captureFromSubsystems();
+        first.save();
+
+        ThoriumConfig second = ThoriumConfig.forFile(file);
+        second.applyToSubsystems();
+
+        assertFalse(ThoriumFeatureToggles.isMobFarmEnabled());
+        assertFalse(ThoriumFeatureToggles.isReflexEnabled());
+        assertEquals(ThoriumFeatureToggles.WeatherMode.OFF, ThoriumFeatureToggles.getWeatherMode());
+        assertEquals(120, ThoriumFeatureToggles.getAfkTimeoutSeconds());
+    }
+
+    @Test
+    void everyHeadlineKeyIsPersistedUnderItsOwnName(@TempDir Path dir) throws Exception {
+        Path file = dir.resolve("thorium-config.json");
+
+        ThoriumConfig config = ThoriumConfig.forFile(file);
+        config.captureFromSubsystems();
+        config.save();
+
+        Map<String, String> written = ThoriumConfig.parseFlatJson(Files.readString(file));
+        for (String key : new String[]{
+                ThoriumConfig.KEY_MOB_FARM,
+                ThoriumConfig.KEY_STORAGE_ITEM_FRAMES,
+                ThoriumConfig.KEY_ELYTRA_SMOOTHER,
+                ThoriumConfig.KEY_AFK_ECO,
+                ThoriumConfig.KEY_AFK_ECO_TIMEOUT,
+                ThoriumConfig.KEY_STUTTER_ALERT,
+                ThoriumConfig.KEY_EXPLOSION_SHIELD,
+                ThoriumConfig.KEY_REFLEX,
+                ThoriumConfig.KEY_WEATHER_MODE,
+                ThoriumConfig.KEY_CLEAN_WATER_FOG}) {
+            assertTrue(written.containsKey(key), key + " must be written to the config file");
+        }
+    }
+
+    @Test
+    void theHeadlineFeatureKeysMatchTheirRegistryEntries() {
+        assertEquals(ThoriumFeatureToggles.Feature.MOB_FARM.configKey(),
+                ThoriumConfig.KEY_MOB_FARM);
+        assertEquals(ThoriumFeatureToggles.Feature.STORAGE_ITEM_FRAMES.configKey(),
+                ThoriumConfig.KEY_STORAGE_ITEM_FRAMES);
+        assertEquals(ThoriumFeatureToggles.Feature.ELYTRA_SMOOTHER.configKey(),
+                ThoriumConfig.KEY_ELYTRA_SMOOTHER);
+        assertEquals(ThoriumFeatureToggles.Feature.AFK_ECO.configKey(),
+                ThoriumConfig.KEY_AFK_ECO);
+        assertEquals(ThoriumFeatureToggles.Feature.STUTTER_ALERT.configKey(),
+                ThoriumConfig.KEY_STUTTER_ALERT);
+        assertEquals(ThoriumFeatureToggles.Feature.EXPLOSION_SHIELD.configKey(),
+                ThoriumConfig.KEY_EXPLOSION_SHIELD);
+        assertEquals(ThoriumFeatureToggles.Feature.REFLEX.configKey(),
+                ThoriumConfig.KEY_REFLEX);
+        assertEquals(ThoriumFeatureToggles.Feature.CLEAN_WATER_FOG.configKey(),
+                ThoriumConfig.KEY_CLEAN_WATER_FOG);
     }
 }

@@ -168,6 +168,22 @@ public final class ThoriumSubsystemReport {
         entries.add(new Entry("input-pacing", Status.UNWIRED,
                 "ThoriumInputPacer.recordPacedTurn has no call site"));
 
+        // --- Headline features --------------------------------------------------
+        // Each one reports itself as UNWIRED until its implementation lands, so the
+        // console and the log never advertise a switch that cannot do anything.
+        for (ThoriumFeatureToggles.Feature feature : ThoriumFeatureToggles.Feature.values()) {
+            entries.add(new Entry(feature.reportName(),
+                    !feature.isWired() ? Status.UNWIRED
+                            : (!feature.isEnabled() ? Status.DISABLED : Status.IDLE),
+                    !feature.isWired() ? "the implementation has not landed yet"
+                            : (feature.isEnabled() ? "enabled" : "disabled by the player")));
+        }
+
+        entries.add(new Entry("weather-rendering",
+                ThoriumFeatureToggles.getWeatherMode() == ThoriumFeatureToggles.WeatherMode.VANILLA
+                        ? Status.IDLE : Status.ACTIVE,
+                ThoriumFeatureToggles.getWeatherMode().name()));
+
         return entries;
     }
 

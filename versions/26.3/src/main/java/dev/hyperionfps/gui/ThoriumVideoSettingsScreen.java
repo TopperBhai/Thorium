@@ -5,25 +5,10 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-import dev.hyperionfps.adaptive.AdaptiveDistanceController;
-import dev.hyperionfps.anim.ThoriumEntityLodThrottler;
-import dev.hyperionfps.audio.ThoriumSoundGovernor;
-import dev.hyperionfps.batch.ThoriumImmediateBatcher;
-import dev.hyperionfps.chunk.ThoriumChunkUploadPacer;
 import dev.hyperionfps.config.ThoriumConfig;
-import dev.hyperionfps.core.ThoriumCompatibility;
-import dev.hyperionfps.core.ThoriumCompatibility;
-import dev.hyperionfps.core.ThreadGovernor;
-import dev.hyperionfps.core.ThoriumSafety;
-import dev.hyperionfps.culling.AsyncOcclusionCuller;
+import dev.hyperionfps.config.ThoriumPresets;
 import dev.hyperionfps.culling.ThoriumBvhCuller;
-import dev.hyperionfps.discord.ThoriumDiscordInvite;
 import dev.hyperionfps.frame.ThoriumFrametimeTracker;
-import dev.hyperionfps.frame.ThoriumFramePacer;
-import dev.hyperionfps.input.ThoriumInputPacer;
-import dev.hyperionfps.memory.IdleJanitor;
-import dev.hyperionfps.memory.ThoriumMemoryOptimizer;
-import dev.hyperionfps.particle.ThoriumParticleBudget;
 import dev.hyperionfps.texture.ThoriumTextureThrottler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -65,6 +50,9 @@ public class ThoriumVideoSettingsScreen extends Screen {
     private static Tab currentTab = Tab.GENERAL;
     private static String activePreset = ThoriumConfig.get().getString(ThoriumConfig.KEY_PRESET, "BALANCED");
 
+    /** Whether this Minecraft version has a Thorium hook in the chunk upload path. */
+    private static final boolean CHUNK_UPLOAD_PACER_SUPPORTED = false;
+
     private final Screen lastScreen;
     private final List<AbstractWidget> tabWidgets = new ArrayList<>();
     private final List<AbstractWidget> contentWidgets = new ArrayList<>();
@@ -89,6 +77,7 @@ public class ThoriumVideoSettingsScreen extends Screen {
         tabWidgets.clear();
         contentWidgets.clear();
         hoveredRow = null;
+        activePreset = ThoriumConfig.get().getString(ThoriumConfig.KEY_PRESET, activePreset);
 
         int marginX = 24;
         int topY = 12;
@@ -162,6 +151,7 @@ public class ThoriumVideoSettingsScreen extends Screen {
         }
         contentWidgets.clear();
         hoveredRow = null;
+        activePreset = ThoriumConfig.get().getString(ThoriumConfig.KEY_PRESET, activePreset);
         this.scrollOffset = 0;
         buildTabContent();
         applyScrollOffset();
@@ -169,268 +159,40 @@ public class ThoriumVideoSettingsScreen extends Screen {
 
     private void buildTabContent() {
         int marginX = listLeft();
-        int startY = this.contentTop;
         int listWidth = listRight() - marginX;
         int rowH = ThoriumSettingsLayout.ROW_HEIGHT;
         int rowGap = ThoriumSettingsLayout.ROW_GAP;
-        int currentY = startY;
+        int currentY = this.contentTop;
 
-        switch (currentTab) {
-            case GENERAL -> {
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Nuclear Performance HUD",
-                        () -> dev.hyperionfps.gui.ThoriumGuiManager.isHudEnabled() ? "ON" : "OFF",
-                        SettingControlType.CHECKBOX,
-                        () -> dev.hyperionfps.gui.ThoriumGuiManager.isHudEnabled(),
-                        b -> dev.hyperionfps.gui.ThoriumGuiManager.setHudEnabled(!dev.hyperionfps.gui.ThoriumGuiManager.isHudEnabled()),
-                        "Live In-Game HUD displaying real-time FPS, frametime stability score, and a 128-sample micro-stutter graph. (Hotkey: F6)",
-                        "★ Real-Time Telemetry"));
-                currentY += rowH + rowGap;
+        // The rows themselves live in the shared catalogue, so every version node
+        // shows the same switches with the same behaviour. Only the widget type and
+        // the rendering differ between the legacy and the modern era.
+        List<ThoriumSettingRows.Spec> rows = switch (currentTab) {
+            case GENERAL -> ThoriumSettingRows.generalRows(() -> ThoriumDiscordScreen.openInvite());
+            case PERFORMANCE -> ThoriumSettingRows.performanceRows(CHUNK_UPLOAD_PACER_SUPPORTED);
+            case ADVANCED -> ThoriumSettingRows.advancedRows();
+        };
 
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Extreme FPS Mode",
-                        () -> AsyncOcclusionCuller.isExtremeFpsMode() ? "ON" : "OFF",
-                        SettingControlType.CHECKBOX,
-                        () -> AsyncOcclusionCuller.isExtremeFpsMode(),
-                        b -> {
-                            AsyncOcclusionCuller.setExtremeFpsMode(!AsyncOcclusionCuller.isExtremeFpsMode());
-                            activePreset = "CUSTOM";
-                        },
-                        "Maximizes framerates by bypassing expensive cosmetic sky passes, distant particles, and weather load. (Hotkey: F7)",
-                        "★ Extreme FPS Gain"));
-                currentY += rowH + rowGap;
-
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Reflex Low-Latency Input",
-                        () -> "NOT WIRED",
-                        SettingControlType.ACTION,
-                        () -> false,
-                        b -> b.setTempStatus("NOT AVAILABLE"),
-                        "Not available yet: the input pacer has no call site in the game, so this switch cannot change anything.",
-                        "⚡ Minimal Input Lag"));
-                currentY += rowH + rowGap;
-
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Zero-Jitter Frame Pacing",
-                        () -> ThoriumFramePacer.isEnabled() ? "ON" : "OFF",
-                        SettingControlType.CHECKBOX,
-                        () -> ThoriumFramePacer.isEnabled(),
-                        b -> ThoriumFramePacer.setEnabled(!ThoriumFramePacer.isEnabled()),
-                        "High-precision micro-sleep frame pacer. Delivers butter-smooth frame intervals and drastically improves 1% low FPS.",
-                        "⚡ Smooth Frametimes"));
-                currentY += rowH + rowGap;
-
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Community Discord",
-                        () -> "OPEN INVITE",
-                        SettingControlType.ACTION,
-                        () -> true,
-                        b -> ThoriumDiscordScreen.openInvite(),
-                        "Opens the Thorium community server in your browser for early builds, tuning help and release notes.",
-                        "★ Join The Community"));
-                currentY += rowH + rowGap;
-
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Invite On First Launch",
-                        () -> ThoriumDiscordInvite.isEnabled() ? "ON" : "OFF",
-                        SettingControlType.CHECKBOX,
-                        () -> ThoriumDiscordInvite.isEnabled(),
-                        b -> ThoriumDiscordInvite.setEnabled(!ThoriumDiscordInvite.isEnabled()),
-                        "Shows the community invite once on the main menu. It never appears again after it has been shown or dismissed.",
-                        "⚡ One-Time Invite"));
-                currentY += rowH + rowGap;
-
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Target FPS Cap",
-                        () -> ThoriumFramePacer.getTargetFps() <= 0 ? "UNCAPPED" : ThoriumFramePacer.getTargetFps() + " FPS",
-                        SettingControlType.CYCLE,
-                        () -> ThoriumFramePacer.isEnabled(),
-                        b -> {
-                            int next = ThoriumFramePacer.nextTargetFps(ThoriumFramePacer.getTargetFps());
-                            ThoriumFramePacer.setTargetFps(next);
-                            ThoriumConfig.get().setInt(ThoriumConfig.KEY_FRAME_TARGET_FPS, next);
-                            ThoriumConfig.get().saveNow();
-                        },
-                        "Caps the client to a fixed framerate using the hybrid sleep-spin pacer. Uncapped lets the game run as fast as the hardware allows.",
-                        "⚡ Frame Cap"));
-            }
-
-            case PERFORMANCE -> {
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Entity Animation LOD",
-                        () -> ThoriumEntityLodThrottler.isEnabled() ? "ON" : "OFF",
-                        SettingControlType.CHECKBOX,
-                        () -> ThoriumEntityLodThrottler.isEnabled(),
-                        b -> ThoriumEntityLodThrottler.setEnabled(!ThoriumEntityLodThrottler.isEnabled()),
-                        "Throttles skeletal bone animation updates for distant entities. Yields massive 60-80% CPU load reduction around mob farms & villages.",
-                        "★ 60-80% Entity CPU Gain"));
-                currentY += rowH + rowGap;
-
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Dual-Stage BVH Occlusion",
-                        () -> ThoriumBvhCuller.isEnabled() ? "ON" : "OFF",
-                        SettingControlType.CHECKBOX,
-                        () -> ThoriumBvhCuller.isEnabled(),
-                        b -> ThoriumBvhCuller.setEnabled(!ThoriumBvhCuller.isEnabled()),
-                        "Hierarchical bounding-box culler using fast O(1) spatial hashing to discard off-screen chunks and mobs before GPU draw calls.",
-                        "★ Reduced Draw Calls"));
-                currentY += rowH + rowGap;
-
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Animated Texture Throttler",
-                        () -> {
-                            int div = ThoriumTextureThrottler.getThrottleDivider();
-                            return ThoriumTextureThrottler.isEnabled() ? (div + "x Rate") : "OFF";
-                        },
-                        SettingControlType.CYCLE,
-                        () -> ThoriumTextureThrottler.isEnabled(),
-                        b -> {
-                            if (!ThoriumTextureThrottler.isEnabled()) {
-                                ThoriumTextureThrottler.setEnabled(true);
-                                ThoriumTextureThrottler.setThrottleDivider(2);
-                            } else {
-                                int cur = ThoriumTextureThrottler.getThrottleDivider();
-                                if (cur == 2) ThoriumTextureThrottler.setThrottleDivider(4);
-                                else if (cur == 4) ThoriumTextureThrottler.setThrottleDivider(8);
-                                else {
-                                    ThoriumTextureThrottler.setEnabled(false);
-                                }
-                            }
-                        },
-                        "Throttles PCIe transfer rate of fluid, fire, and portal animations to save VRAM transfer bandwidth when not directly viewed.",
-                        "⚡ VRAM Bandwidth Saver"));
-                currentY += rowH + rowGap;
-
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Chunk Upload Pacer",
-                        () -> "NOT AVAILABLE ON 26.x",
-                        SettingControlType.ACTION,
-                        () -> false,
-                        b -> b.setTempStatus("NOT AVAILABLE"),
-                        "Not available on the 26.x render pipeline: the modern chunk upload path has no Thorium hook.",
-                        "⚡ Zero Chunk Hitching"));
-                currentY += rowH + rowGap;
-
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Immediate HUD Batching",
-                        () -> "NOT WIRED",
-                        SettingControlType.ACTION,
-                        () -> false,
-                        b -> b.setTempStatus("NOT AVAILABLE"),
-                        "Not available yet: the batcher is flushed every frame, but nothing consults its merge decision, so this switch cannot change anything.",
-                        "★ Fast UI Drawing"));
-            }
-
-            case ADVANCED -> {
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Fast Math Overrides",
-                        () -> ThoriumCompatibility.isFastMathEnabled() ? "ON" : "OFF",
-                        SettingControlType.CHECKBOX,
-                        () -> ThoriumCompatibility.isFastMathEnabled(),
-                        b -> {
-                            boolean next = !ThoriumCompatibility.isFastMathEnabled();
-                            ThoriumCompatibility.setFastMathEnabled(next);
-                            ThoriumConfig.get().setBoolean(ThoriumConfig.KEY_FAST_MATH, next);
-                            ThoriumConfig.get().saveNow();
-                        },
-                        "Replaces Minecraft's sin/cos/invSqrt with a lookup table. Faster but less precise, so it is disabled automatically while a shader pack is loaded.",
-                        "⚡ Fast Math"));
-                currentY += rowH + rowGap;
-
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Auto-Yield to Sodium",
-                        () -> ThoriumCompatibility.isAutoYieldEnabled() ? "ON" : "OFF",
-                        SettingControlType.CHECKBOX,
-                        () -> ThoriumCompatibility.isAutoYieldEnabled(),
-                        b -> {
-                            boolean next = !ThoriumCompatibility.isAutoYieldEnabled();
-                            ThoriumCompatibility.setAutoYieldEnabled(next);
-                            ThoriumConfig.get().setBoolean(ThoriumConfig.KEY_COMPAT_AUTO_YIELD, next);
-                            ThoriumConfig.get().saveNow();
-                        },
-                        "Disables Thorium's own culling when a competing renderer such as Sodium is installed, so the two never fight over visibility.",
-                        "⚡ Coexist With Sodium"));
-                currentY += rowH + rowGap;
-
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Adaptive Render Distance",
-                        () -> AdaptiveDistanceController.getInstance().isEnabled()
-                                ? ("ON (" + AdaptiveDistanceController.getInstance().getCurrentDistance() + "ch)")
-                                : "OFF",
-                        SettingControlType.CHECKBOX,
-                        () -> AdaptiveDistanceController.getInstance().isEnabled(),
-                        b -> {
-                            boolean next = !AdaptiveDistanceController.getInstance().isEnabled();
-                            AdaptiveDistanceController.getInstance().setEnabled(next);
-                            ThoriumConfig.get().setBoolean(ThoriumConfig.KEY_ADAPTIVE_DISTANCE, next);
-                            ThoriumConfig.get().saveNow();
-                        },
-                        "Lowers the render distance when the framerate falls below the target. It never raises it again on its own, because every change makes the game re-download its whole chunk cache.",
-                        "Frame Rate Protection"));
-                currentY += rowH + rowGap;
-
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Safe Mode (Disable Thorium)",
-                        () -> ThoriumSafety.isSafeMode() ? "ON" : "OFF",
-                        SettingControlType.CHECKBOX,
-                        () -> ThoriumSafety.isSafeMode(),
-                        b -> {
-                            boolean next = !ThoriumSafety.isSafeMode();
-                            ThoriumSafety.setConfigSafeMode(next);
-                            ThoriumConfig.get().setBoolean(ThoriumConfig.KEY_SAFE_MODE, next);
-                            ThoriumConfig.get().saveNow();
-                        },
-                        "Emergency escape hatch. Disables every Thorium mixin and optimisation on the next launch. Turn this on if Thorium causes a crash or a rendering problem on your device.",
-                        "âš¡ Emergency Disable"));
-                currentY += rowH + rowGap;
-
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Sound Engine Governor",
-                        () -> ThoriumSoundGovernor.isEnabled() ? "ON" : "OFF",
-                        SettingControlType.CHECKBOX,
-                        () -> ThoriumSoundGovernor.isEnabled(),
-                        b -> ThoriumSoundGovernor.setEnabled(!ThoriumSoundGovernor.isEnabled()),
-                        "Suppresses identical concurrent sound instances on the OpenAL audio thread, preventing audio-induced game micro-freezes.",
-                        "⚡ Audio Thread Fix"));
-                currentY += rowH + rowGap;
-
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Particle Budget & Culling",
-                        () -> ThoriumParticleBudget.isEnabled() ? "ON" : "OFF",
-                        SettingControlType.CHECKBOX,
-                        () -> ThoriumParticleBudget.isEnabled(),
-                        b -> ThoriumParticleBudget.setEnabled(!ThoriumParticleBudget.isEnabled()),
-                        "Caps how many particles may be created per budget window and rejects particles that are off-screen, out of range or hidden behind blocks.",
-                        "★ Particle Protection"));
-                currentY += rowH + rowGap;
-
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Thread Priority Governor",
-                        () -> "BOOSTED",
-                        SettingControlType.ACTION,
-                        () -> true,
-                        b -> {
-                            ThreadGovernor.boostActiveMinecraftThreads();
-                            b.setTempStatus("BOOSTED!");
-                        },
-                        "Elevates the OS scheduling priority of Minecraft's render thread and background thread pool to prevent CPU starvation.",
-                        "⚡ Prioritize Minecraft"));
-                currentY += rowH + rowGap;
-
-                addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
-                        "Purge Idle Memory Now",
-                        () -> "CLEAN",
-                        SettingControlType.ACTION,
-                        () -> true,
-                        b -> {
-                            long freed = ThoriumMemoryOptimizer.purgeMemoryNow();
-                            IdleJanitor.sweepOnce(0L);
-                            b.setTempStatus("+" + Math.max(12, freed) + " MB!");
-                        },
-                        "Instantly sweeps native direct memory buffers and triggers GC release for background allocations to reclaim RAM.",
-                        "⚡ Reclaim System RAM"));
-            }
+        for (ThoriumSettingRows.Spec spec : rows) {
+            addSettingRow(new SettingRowButton(marginX, currentY, listWidth, rowH,
+                    spec.title(),
+                    spec.status(),
+                    mapControlType(spec.controlType()),
+                    spec.enabled(),
+                    b -> spec.onClick().run(s -> b.setTempStatus(s)),
+                    spec.description(),
+                    spec.impactBadge()));
+            currentY += rowH + rowGap;
         }
+    }
+
+    /** Maps the shared control type onto this version's widget enum. */
+    private static SettingControlType mapControlType(ThoriumSettingRows.ControlType type) {
+        return switch (type) {
+            case CHECKBOX -> SettingControlType.CHECKBOX;
+            case CYCLE -> SettingControlType.CYCLE;
+            case ACTION -> SettingControlType.ACTION;
+        };
     }
 
     /**
@@ -483,53 +245,9 @@ public class ThoriumVideoSettingsScreen extends Screen {
     }
 
     private void applyPreset(String preset) {
-        activePreset = preset;
-        switch (preset) {
-            case "POTATO" -> {
-                AsyncOcclusionCuller.setExtremeFpsMode(true);
-                ThoriumTextureThrottler.setEnabled(true);
-                ThoriumTextureThrottler.setThrottleDivider(4);
-                ThoriumImmediateBatcher.setEnabled(true);
-                ThoriumEntityLodThrottler.setEnabled(true);
-                ThoriumBvhCuller.setEnabled(true);
-                ThoriumSoundGovernor.setEnabled(true);
-                ThoriumParticleBudget.setEnabled(true);
-                ThoriumInputPacer.setEnabled(true);
-                ThoriumChunkUploadPacer.setEnabled(true);
-                ThoriumCompatibility.setFastMathEnabled(false);
-                ThoriumCompatibility.setFastMathEnabled(false);
-            }
-            case "BALANCED" -> {
-                AsyncOcclusionCuller.setExtremeFpsMode(false);
-                ThoriumTextureThrottler.setEnabled(true);
-                ThoriumTextureThrottler.setThrottleDivider(2);
-                ThoriumImmediateBatcher.setEnabled(true);
-                ThoriumEntityLodThrottler.setEnabled(true);
-                ThoriumBvhCuller.setEnabled(true);
-                ThoriumSoundGovernor.setEnabled(true);
-                ThoriumParticleBudget.setEnabled(true);
-                ThoriumInputPacer.setEnabled(true);
-                ThoriumChunkUploadPacer.setEnabled(true);
-                ThoriumCompatibility.setFastMathEnabled(false);
-                ThoriumCompatibility.setFastMathEnabled(false);
-            }
-            case "NUCLEAR" -> {
-                AsyncOcclusionCuller.setExtremeFpsMode(false);
-                ThoriumTextureThrottler.setEnabled(true);
-                ThoriumTextureThrottler.setThrottleDivider(1);
-                ThoriumImmediateBatcher.setEnabled(true);
-                ThoriumEntityLodThrottler.setEnabled(true);
-                ThoriumBvhCuller.setEnabled(true);
-                ThoriumSoundGovernor.setEnabled(true);
-                ThoriumParticleBudget.setEnabled(true);
-                ThoriumInputPacer.setEnabled(true);
-                ThoriumFramePacer.setEnabled(true);
-                ThoriumChunkUploadPacer.setEnabled(true);
-                ThoriumCompatibility.setFastMathEnabled(true);
-            }
-        }
-        ThoriumConfig.get().setString(ThoriumConfig.KEY_PRESET, preset);
-        ThoriumConfig.get().saveNow();
+        // The preset logic is shared: all five version nodes apply the same profile.
+        ThoriumPresets.apply(preset);
+        activePreset = ThoriumConfig.get().getString(ThoriumConfig.KEY_PRESET, activePreset);
     }
 
     @Override
@@ -703,7 +421,7 @@ public class ThoriumVideoSettingsScreen extends Screen {
                                 String description, String impactBadge) {
             super(x, y, width, height, Component.empty(), b -> {
                 onClickAction.accept((SettingRowButton) b);
-                ThoriumConfig.get().setString(ThoriumConfig.KEY_PRESET, activePreset);
+                activePreset = ThoriumConfig.get().getString(ThoriumConfig.KEY_PRESET, activePreset);
                 ThoriumConfig.get().saveNow();
             }, DEFAULT_NARRATION);
             this.title = title;

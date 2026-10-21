@@ -1,6 +1,6 @@
 # spec.md — Thorium Product & Technical Specification
 
-**Mod id:** `thorium` · **Codename:** Th-90 · **Version:** 0.1.1
+**Mod id:** `thorium` · **Codename:** Th-90 · **Version:** 0.1.2
 **Package:** `dev.hyperionfps` · **Loader:** Fabric · **Type:** Client-side optimization mod
 
 > This document defines *what Thorium is and must do*. It is the requirement source of
@@ -145,6 +145,8 @@ Format: `REQ-<AREA>-<n>` · **Must** = required for v0.2 · **Should** = desirab
 | REQ-UI-7 | Surface a one-line diagnostic telemetry summary combining memory, culling state, GL skips and batched draws. | Must |
 | REQ-UI-8 | Provide a **Safe Mode** escape hatch, both as a settings toggle and as a `-D` system property, that disables every mixin and optimisation. | Must |
 | REQ-UI-9 | The settings console must stay usable on a short window: the rows scroll inside the band between the header and the footer bar, so a row is never drawn over the footer and every row stays reachable. | Must |
+| REQ-UI-10 | Every settings row and every hardware preset must be defined **once** in shared code (`ThoriumSettingRows`, `ThoriumPresets`) and rendered by all five version nodes, so a feature can never exist on one Minecraft version and be missing on another. | Must |
+| REQ-UI-11 | A headline feature whose implementation has not landed must be shown as `NOT AVAILABLE`, must refuse the click, and must be reported as `UNWIRED` in the startup subsystem report. | Must |
 
 ### 2.7 Platform & compatibility
 
@@ -173,6 +175,21 @@ Format: `REQ-<AREA>-<n>` · **Must** = required for v0.2 · **Should** = desirab
 | REQ-QUAL-2 | Tests are plain-JVM JUnit 5 — no Minecraft bootstrap required. | Must |
 | REQ-QUAL-3 | All 5 version nodes must compile and test green before any release. | Must |
 | REQ-QUAL-4 | Documented conventions live in `AGENTS.md`; requirements in `spec.md`; status in `state.md`. | Must |
+
+### 2.9 Next-Gen Innovation & Player-Facing Toggles (Headline Set)
+
+| ID | Requirement | Priority |
+| :--- | :--- | :--- |
+| REQ-HEAD-1 | **Mob Farm Optimizer** (`anim.mob_farm.enabled`): Detect dense mob clusters (>15 entities in 5x5 block area) and decouple/throttle secondary animation bone ticks and limb swings for non-targeted, unnamed mobs. | Must |
+| REQ-HEAD-2 | **Storage Room & Item Frame Culling** (`culling.storage_item_frames.enabled`): Aggressively cull chest-type block entities (`ChestBlockEntity`, `TrappedChestBlockEntity`, `EnderChestBlockEntity`, `ShulkerBoxBlockEntity`) and item frames when enclosed by opaque blocks or at distance, exempting open containers. | Must |
+| REQ-HEAD-3 | **Elytra Flight Smoother** (`chunk.elytra_smoother.enabled`): Prioritize chunk mesh uploads within a 45° forward cone along the player velocity vector $\vec{v}$ when speed exceeds 15 m/s, bringing upload pacing parity to 26.x Blaze3D pipelines. | Must |
+| REQ-HEAD-4 | **AFK Battery & Power Saver (Stealth AFK™)** (`frame.afk_eco.enabled`): Detect window focus loss or 60 s input inactivity, clamping render rate to 10 FPS and parking via `LockSupport.parkNanos` (cutting CPU/GPU power up to 75%), waking instantly (0 ms) on mouse/key activity. | Must |
+| REQ-HEAD-5 | **Instant Lag Spike Alert (Nuclear Stutter Hunter™)** (`telemetry.stutter_alert.enabled`): Track 5-phase frame execution breakdown and correlate JVM `GarbageCollectorMXBean` pause events, displaying an instant HUD toast attributing freezes (e.g. `Spike: 58ms [GC: 34ms | Mobs: 18ms | Chunk: 6ms]`). | Must |
+| REQ-HEAD-6 | **Explosion & Firework Shield** (`particle.explosion_shield.enabled`): Cap high-density particle floods from TNT explosions, Wither spawns, and fireworks when burst rates exceed 250 particles/sec, preventing frame freezes while preserving telegraph cues. | Must |
+| REQ-HEAD-7 | **Ultra Low-Latency Reflex** (`input.reflex.enabled`): Late-poll mouse and keyboard events at the tail of the frame boundary wait immediately before camera/matrix calculation, cutting input-to-photon latency by 8–14 ms. | Must |
+| REQ-HEAD-8 | **No-Lag Weather & Rain** (`render.weather.mode`): Support `VANILLA`, `MINIMAL` (lightweight single-pass precipitation; suppress ground splash particle spam), and `OFF` (clean weather without affecting server precipitation state). | Must |
+| REQ-HEAD-9 | **Clean Water & Fast Fog** (`render.clean_water_fog.enabled`): Clamp underwater fog distances and simplify volumetric fog curves for crisp visibility and reduced GPU fragment fill-rate overhead. | Must |
+| REQ-HEAD-10 | **Purge RAM Now** (`ThoriumMemoryOptimizer.purgeMemoryNow()`): Expose an interactive action button in the settings console that flushes culling caches, clears direct buffer pools, and sweeps heap/off-heap memory, displaying reclaimed megabytes. The number shown must be the **measured** amount - a fabricated minimum is a lie. | Must |
 
 ---
 
@@ -205,7 +222,7 @@ code. Mixins call *into* policy engines; policy engines never call mixins.
 
 | Package | Key classes | Responsibility |
 | :--- | :--- | :--- |
-| `core` | `RenderThreads`, `ThreadGovernor`, `TelemetryGate`, `ThoriumSafety`, `ThoriumCompatibility`, `ThoriumSubsystemReport` | Client-thread capture, priority elevation, telemetry kill-switch, mod-compatibility probe, subsystem status report |
+| `core` | `RenderThreads`, `ThreadGovernor`, `TelemetryGate`, `ThoriumSafety`, `ThoriumCompatibility`, `ThoriumSubsystemReport`, `ThoriumFeatureToggles` | Client-thread capture, priority elevation, telemetry kill-switch, mod-compatibility probe, subsystem status report, headline feature switches |
 | `frame` | `ThoriumFrametimeTracker`, `ThoriumFramePacer`, `FramePacing`, `ThoriumFrameContext` | Frametime history, sleep→spin pacing, boot-window VSync policy, authoritative per-frame context |
 | `culling` | `AsyncOcclusionCuller`, `SectionCullingEngine`, `OcclusionGrid`, `OcclusionRaycaster`, `ThoriumBvhCuller`, `FrustumCache` | Visibility decisions for sections, entities, block entities, particles |
 | `memory` | `DirectBufferPool`, `OffHeap`, `IdleJanitor`, `ThoriumMemoryOptimizer`, `pool/*` | Zero-allocation pools, native memory return, idle sweeping, heap defence |
@@ -220,7 +237,8 @@ code. Mixins call *into* policy engines; policy engines never call mixins.
 | `batch` | `ThoriumImmediateBatcher` | Immediate-mode 2D draw batching policy |
 | `render` | `HudBatcher`, `GlStateTracker` | HUD draw merging, redundant GL state filtering |
 | `env` | `LauncherEnvironment` | Launcher/GC/heap evidence probe |
-| `gui` | `ThoriumGuiManager` + per-version screens | HUD state, Extreme FPS toggle, telemetry summary |
+| `gui` | `ThoriumGuiManager`, `ThoriumSettingsLayout`, `ThoriumSettingRows` + per-version screens | HUD state, Extreme FPS toggle, telemetry summary, shared settings-row catalogue |
+| `config` | `ThoriumConfig`, `ThoriumPresets` | Atomic settings persistence, hardware preset profiles |
 | `version` | `VersionBridge`, `DefaultVersionBridge`, `GameVersion`, `Era`, `GameVersionDetector`, `VersionBridgeRegistry` | Version abstraction and detection |
 | `mixin` | `HyperionMixinPlugin`, `core/*`, `legacy/*`, `modern/*` | Engine hooks and era routing |
 
@@ -251,6 +269,35 @@ code. Mixins call *into* policy engines; policy engines never call mixins.
 | EMA alpha / adjust interval | 0.15 / 2000 ms | `AdaptiveDistanceController` |
 | Adaptive settle window / warm-up | 30 s / 10 s per world | `AdaptiveDistanceController`, `ThoriumFrameContext` |
 | Render thread priority | `Thread.MAX_PRIORITY` (10) | `ThreadGovernor` |
+| AFK Eco target frame rate | 10 FPS | `ThoriumAfkManager` |
+| AFK Eco default timeout | 60 s (5 s – 3600 s) | `ThoriumFeatureToggles` |
+| Stutter spike threshold | `max(30 ms, 2.5 × avg)` with 12 ms jitter | `ThoriumStutterHunter` |
+| Explosion particle burst cap | 250 particles/s | `ExplosionShield` |
+| Mob farm cluster threshold | > 15 entities in 5×5 blocks | `MobFarmOptimizer` |
+| Elytra flight speed threshold | > 15 m/s | `ElytraFlightSmoother` |
+| Reflex upload cone | 45° forward | `ThoriumChunkUploadPacer` |
+
+### 3.4 The headline feature registry
+
+The eight player-facing "headline" features (REQ-HEAD-1 … REQ-HEAD-9) are delivered
+as a sequence of independent steps, so their **configuration** lives in one place:
+`dev.hyperionfps.core.ThoriumFeatureToggles`.
+
+| Concern | Owner |
+| :--- | :--- |
+| The persisted switch (boolean, timeout, weather mode) | `ThoriumFeatureToggles` |
+| The persistence itself (key, capture, apply) | `ThoriumConfig` |
+| The console row (title, status, click, description) | `ThoriumSettingRows` |
+| The widget and the drawing | the per-version `ThoriumVideoSettingsScreen` |
+| The behaviour | the feature's own subsystem, which reads its switch from the registry |
+
+Two rules follow from this:
+
+* **A feature is only *wired* once it has a live call site.** Until then the console
+  shows `NOT AVAILABLE` and refuses the click, and the startup report lists it as
+  `UNWIRED` (REQ-UI-2, REQ-DIAG-1).
+* **The registry is the only copy of the switch.** A subsystem reads it; it never
+  keeps a second flag that could drift (NFR-7).
 
 ---
 
@@ -359,6 +406,16 @@ not silently drop settings.
 | `adaptive.distance.enabled` | Adaptive render distance (opt-in — it rewrites a vanilla option) | `false` |
 | `discord.invite.enabled` | One-time community invite on the main menu | `true` |
 | `discord.invite.shown` | Whether the community invite has already been offered | `false` |
+| `anim.mob_farm.enabled` | Mob Farm Optimizer (swarm limb animation & AI throttling) | `true` |
+| `culling.storage_item_frames.enabled` | Aggressive culling for chests, shulkers and item frames | `true` |
+| `chunk.elytra_smoother.enabled` | Elytra Flight Smoother (velocity-vector mesh prioritizing) | `true` |
+| `frame.afk_eco.enabled` | AFK Battery & Power Saver (auto 10 FPS cap & CPU parking) | `true` |
+| `frame.afk_eco.timeout_sec` | Inactivity timeout in seconds before AFK Eco activates | `60` |
+| `telemetry.stutter_alert.enabled` | Instant Lag Spike Alert (Nuclear Stutter Hunter™ toast) | `true` |
+| `particle.explosion_shield.enabled` | Explosion & Firework Shield (capping particle flood spam) | `true` |
+| `input.reflex.enabled` | Ultra Low-Latency Reflex (late-frame input sampling) | `true` |
+| `render.weather.mode` | No-Lag Weather rendering mode (`VANILLA`, `MINIMAL`, `OFF`) | `MINIMAL` |
+| `render.clean_water_fog.enabled` | Clean Water & Fast Fog optimization | `true` |
 
 Persistence rules:
 * The file is written on every user action (toggle click, preset selection, screen close).

@@ -23,6 +23,7 @@ import dev.hyperionfps.culling.OcclusionGrid;
 import dev.hyperionfps.culling.SectionCullingEngine;
 import dev.hyperionfps.culling.ThoriumBvhCuller;
 import dev.hyperionfps.core.ThoriumCompatibility;
+import dev.hyperionfps.core.ThoriumFeatureToggles;
 import dev.hyperionfps.core.ThoriumSafety;
 import dev.hyperionfps.frame.ThoriumFramePacer;
 import dev.hyperionfps.gui.ThoriumGuiManager;
@@ -94,6 +95,40 @@ public final class ThoriumConfig {
 
     /** Persisted safe-mode switch - disables every Thorium optimisation. */
     public static final String KEY_SAFE_MODE = "safeMode";
+
+    // --------------------------------------------------------------------
+    // Headline feature keys (REQ-HEAD-1 .. REQ-HEAD-9)
+    // --------------------------------------------------------------------
+
+    /** REQ-HEAD-1 - Mob Farm Optimizer: throttles limb animation in dense mob clusters. */
+    public static final String KEY_MOB_FARM = "anim.mob_farm.enabled";
+
+    /** REQ-HEAD-2 - aggressive culling of chests, shulkers and item frames. */
+    public static final String KEY_STORAGE_ITEM_FRAMES = "culling.storage_item_frames.enabled";
+
+    /** REQ-HEAD-3 - Elytra Flight Smoother: prioritises chunk uploads along the flight vector. */
+    public static final String KEY_ELYTRA_SMOOTHER = "chunk.elytra_smoother.enabled";
+
+    /** REQ-HEAD-4 - AFK Battery &amp; Power Saver: throttles the client while the player is away. */
+    public static final String KEY_AFK_ECO = "frame.afk_eco.enabled";
+
+    /** REQ-HEAD-4 - inactivity timeout before AFK Eco engages, in seconds. */
+    public static final String KEY_AFK_ECO_TIMEOUT = "frame.afk_eco.timeout_sec";
+
+    /** REQ-HEAD-5 - Instant Lag Spike Alert: attributes a freeze to its dominant phase. */
+    public static final String KEY_STUTTER_ALERT = "telemetry.stutter_alert.enabled";
+
+    /** REQ-HEAD-6 - Explosion &amp; Firework Shield: caps high-density particle floods. */
+    public static final String KEY_EXPLOSION_SHIELD = "particle.explosion_shield.enabled";
+
+    /** REQ-HEAD-7 - Ultra Low-Latency Reflex: samples input at the tail of the frame. */
+    public static final String KEY_REFLEX = "input.reflex.enabled";
+
+    /** REQ-HEAD-8 - weather rendering mode: {@code VANILLA}, {@code MINIMAL} or {@code OFF}. */
+    public static final String KEY_WEATHER_MODE = "render.weather.mode";
+
+    /** REQ-HEAD-9 - Clean Water &amp; Fast Fog: clamps underwater fog and simplifies the fog curve. */
+    public static final String KEY_CLEAN_WATER_FOG = "render.clean_water_fog.enabled";
 
     /** Whether Thorium stands down for a competing renderer (Sodium family). */
     public static final String KEY_COMPAT_AUTO_YIELD = "compat.autoYield";
@@ -329,6 +364,21 @@ public final class ThoriumConfig {
         run("adaptive distance", () -> AdaptiveDistanceController.getInstance().setEnabled(getBoolean(KEY_ADAPTIVE_DISTANCE, false)));
         run("fast math", () -> ThoriumCompatibility.setFastMathEnabled(getBoolean(KEY_FAST_MATH, false)));
 
+        // --- Headline features -------------------------------------------------
+        // These live in ThoriumFeatureToggles because their implementations land
+        // one step at a time; the switch itself is persisted from day one.
+        run("mob farm optimizer", () -> ThoriumFeatureToggles.setMobFarmEnabled(getBoolean(KEY_MOB_FARM, true)));
+        run("storage culling", () -> ThoriumFeatureToggles.setStorageItemFramesEnabled(getBoolean(KEY_STORAGE_ITEM_FRAMES, true)));
+        run("elytra smoother", () -> ThoriumFeatureToggles.setElytraSmootherEnabled(getBoolean(KEY_ELYTRA_SMOOTHER, true)));
+        run("afk eco", () -> ThoriumFeatureToggles.setAfkEcoEnabled(getBoolean(KEY_AFK_ECO, true)));
+        run("afk eco timeout", () -> ThoriumFeatureToggles.setAfkTimeoutSeconds(getInt(KEY_AFK_ECO_TIMEOUT, 60)));
+        run("stutter alert", () -> ThoriumFeatureToggles.setStutterAlertEnabled(getBoolean(KEY_STUTTER_ALERT, true)));
+        run("explosion shield", () -> ThoriumFeatureToggles.setExplosionShieldEnabled(getBoolean(KEY_EXPLOSION_SHIELD, true)));
+        run("reflex", () -> ThoriumFeatureToggles.setReflexEnabled(getBoolean(KEY_REFLEX, true)));
+        run("weather mode", () -> ThoriumFeatureToggles.setWeatherMode(
+                ThoriumFeatureToggles.WeatherMode.parse(getString(KEY_WEATHER_MODE, "MINIMAL"))));
+        run("clean water fog", () -> ThoriumFeatureToggles.setCleanWaterFogEnabled(getBoolean(KEY_CLEAN_WATER_FOG, true)));
+
         LOGGER.info("Applied persisted Thorium settings (preset={}, hud={}, extremeFps={})",
                 getString(KEY_PRESET, "BALANCED"),
                 getBoolean(KEY_HUD, true),
@@ -365,6 +415,18 @@ public final class ThoriumConfig {
         setBoolean(KEY_LIGHT_ENGINE, AsyncLightEngine.getInstance().isEnabled());
         setBoolean(KEY_ADAPTIVE_DISTANCE, AdaptiveDistanceController.getInstance().isEnabled());
         setBoolean(KEY_FAST_MATH, ThoriumCompatibility.isFastMathEnabled());
+
+        // --- Headline features -------------------------------------------------
+        setBoolean(KEY_MOB_FARM, ThoriumFeatureToggles.isMobFarmEnabled());
+        setBoolean(KEY_STORAGE_ITEM_FRAMES, ThoriumFeatureToggles.isStorageItemFramesEnabled());
+        setBoolean(KEY_ELYTRA_SMOOTHER, ThoriumFeatureToggles.isElytraSmootherEnabled());
+        setBoolean(KEY_AFK_ECO, ThoriumFeatureToggles.isAfkEcoEnabled());
+        setInt(KEY_AFK_ECO_TIMEOUT, ThoriumFeatureToggles.getAfkTimeoutSeconds());
+        setBoolean(KEY_STUTTER_ALERT, ThoriumFeatureToggles.isStutterAlertEnabled());
+        setBoolean(KEY_EXPLOSION_SHIELD, ThoriumFeatureToggles.isExplosionShieldEnabled());
+        setBoolean(KEY_REFLEX, ThoriumFeatureToggles.isReflexEnabled());
+        setString(KEY_WEATHER_MODE, ThoriumFeatureToggles.getWeatherMode().name());
+        setBoolean(KEY_CLEAN_WATER_FOG, ThoriumFeatureToggles.isCleanWaterFogEnabled());
     }
 
     /**
