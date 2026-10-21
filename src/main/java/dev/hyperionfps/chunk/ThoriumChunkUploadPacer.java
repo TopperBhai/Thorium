@@ -49,6 +49,17 @@ public final class ThoriumChunkUploadPacer {
             return;
         }
 
+        long start = System.nanoTime();
+        try {
+            drain(uploadQueue);
+        } finally {
+            // The Stutter Hunter needs to know how much of the frame was spent
+            // uploading chunk meshes - one of the classic chunk-hitch causes.
+            dev.hyperionfps.telemetry.ThoriumPhaseTimer.addChunkUpload(System.nanoTime() - start);
+        }
+    }
+
+    private static void drain(Queue<Runnable> uploadQueue) {
         if (!enabled) {
             Runnable task;
             while ((task = uploadQueue.poll()) != null) {

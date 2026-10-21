@@ -17,7 +17,7 @@
 | :--- | :--- | :--- |
 | Core subsystems | 🟢 Complete | All 18 packages implemented with metrics and toggles |
 | Multi-version build | 🟢 Complete | 5 nodes, shared source tree, era-routed mixins |
-| Unit tests | 🟢 Green | 130 tests / 30 classes, 0 failures on all five nodes |
+| Unit tests | 🟢 Green | 178 tests / 35 classes, 0 failures on all five nodes |
 | Build | 🟢 Green | `buildAll` produces 5 jars |
 | Mixin target audit | 🟢 Fixed | A dead mixin target now **fails the build** (G-12) |
 | Frame context | 🟢 Fixed | One authoritative per-frame publisher on all five nodes (A-3) |
@@ -31,7 +31,7 @@
 | Mod coexistence | 🟢 Fixed | Sodium/Embeddium and shader packs are detected; Thorium stands down (D-1/D-2) |
 | Startup log honesty | 🟢 Fixed | A live subsystem report replaces the hardcoded claims (A-13/D-4) |
 | Dead subsystems | 🔴 Open | 7 implemented subsystems still have **no call site** — see §4.2 |
-| Headline Innovation Plan | 🟡 In Progress | **Steps 1–2 done** (config matrix + AFK Eco); Step 3 (Stutter Hunter) is next |
+| Headline Innovation Plan | 🟡 In Progress | **Steps 1–3 done** (config matrix + AFK Eco + Stutter Hunter); Step 4 (Storage Culling) is next |
 | Settings console duplication | 🟢 Fixed | The rows and the presets live in shared code now — 5 screens, one catalogue |
 | Performance validation | 🟡 Unverified | No in-game benchmark harness or capture tooling (G-7) |
 | Release tagging | 🔴 Missing | No git tags for 0.1.1 (G-11) |
@@ -607,8 +607,8 @@ Organized in [`TODO.md`](./TODO.md) to deliver maximum player-facing value in co
 | :--- | :--- | :--- | :--- | :--- |
 | **Step 1** | **Core Config & Settings Console Matrix** | 10 headline keys, presets, all 5 `ThoriumVideoSettingsScreen`s, Purge RAM button | ✅ **Done** | `ThoriumConfigTest` (155 tests), `test` (5/5), `buildAll` |
 | **Step 2** | **AFK Battery & Power Saver (Stealth AFK™)** | Inactivity / unfocused 10 FPS cap, CPU park, 0 ms wake | ✅ **Done** | `ThoriumAfkManagerTest` (12 tests), `test` (5/5) |
-| **Step 3** | **Instant Lag Spike Alert (Nuclear Stutter Hunter™)** | 5-phase breakdown, GC pause listener, HUD toast | ⏳ Pending | `StutterHunterTest` |
-| **Step 4** | **Storage Room & Item Frame Culling** | Container & item frame occlusion and distance culling | ⏳ Pending | `StorageCullingTest` |
+| **Step 3** | **Instant Lag Spike Alert (Nuclear Stutter Hunter™)** | 5-phase breakdown, GC pause listener, HUD toast | ✅ **Done** | `ThoriumStutterHunterTest` (11 tests), `test` (5/5) |
+| **Step 4** | **Storage Room & Item Frame Culling** | Container & item frame occlusion and distance culling | ⏳ Next | `StorageCullingTest` |
 | **Step 5** | **Mob Farm & Swarm Optimizer** | Dense swarm animation decoupling & sound dampening | ⏳ Pending | `MobFarmOptimizerTest` |
 | **Step 6** | **Explosion & Firework Shield** | Particle burst rate-limiting (TNT/fireworks) | ⏳ Pending | `ExplosionShieldTest` |
 | **Step 7** | **Elytra Flight Smoother & Modern Chunk Upload Parity** | Forward-cone upload prioritization & 26.x Blaze3D hook | ⏳ Pending | `ChunkUploadPacerTest` |

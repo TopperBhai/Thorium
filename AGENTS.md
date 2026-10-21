@@ -34,10 +34,11 @@ It is the operational contract. For *what* the product is supposed to do, read
 7. **Never write a vanilla option that the server also owns** — most importantly
    `Options#renderDistance`. See §10.11; it is the single most expensive mistake this
    codebase has made.
-8. **Small atomic steps & mandatory markdown synchronization.** Break large features
-   into 5–10 small, verifiable steps (tracked in [`TODO.md`](./TODO.md)). **After every
-   single step**, run the test gate and update all core docs: `TODO.md`, `spec.md`,
-   `state.md`, and `AGENTS.md`. A new AI session must be able to resume immediately
+8. **Small atomic steps, mandatory markdown synchronization & hard turn stop.** Break large features
+   into 5–10 small, verifiable steps (tracked in [`TODO.md`](./TODO.md)). Execute **strictly one step
+   at a time**. After each step, run the test gate, update all core docs (`TODO.md`, `spec.md`,
+   `state.md`, and `AGENTS.md`), and **STOP execution**. Never start the next step in the same turn
+   without explicit user confirmation. A new AI session must be able to resume immediately
    without re-deriving context or guessing what is done.
 
 ---

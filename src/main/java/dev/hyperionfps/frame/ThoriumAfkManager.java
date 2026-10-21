@@ -108,11 +108,11 @@ public final class ThoriumAfkManager {
             return;
         }
         PARK_COUNT.incrementAndGet();
-        long remaining = ECO_PARK_NANOS;
-        while (remaining > 0L) {
+        long deadline = System.nanoTime() + ECO_PARK_NANOS;
+        while (System.nanoTime() < deadline) {
+            long remaining = deadline - System.nanoTime();
             long slice = Math.min(remaining, ECO_PARK_SLICE_NANOS);
             LockSupport.parkNanos(slice);
-            remaining -= slice;
             if (!ecoActive) {
                 // Woken by an input event - do not spend the rest of the budget.
                 return;

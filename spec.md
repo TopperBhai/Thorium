@@ -237,7 +237,8 @@ code. Mixins call *into* policy engines; policy engines never call mixins.
 | `batch` | `ThoriumImmediateBatcher` | Immediate-mode 2D draw batching policy |
 | `render` | `HudBatcher`, `GlStateTracker` | HUD draw merging, redundant GL state filtering |
 | `env` | `LauncherEnvironment` | Launcher/GC/heap evidence probe |
-| `gui` | `ThoriumGuiManager`, `ThoriumSettingsLayout`, `ThoriumSettingRows` + per-version screens | HUD state, Extreme FPS toggle, telemetry summary, shared settings-row catalogue |
+| `gui` | `ThoriumGuiManager`, `ThoriumSettingsLayout`, `ThoriumSettingRows`, `ThoriumToastQueue` + per-version screens | HUD state, Extreme FPS toggle, telemetry summary, shared settings-row catalogue, in-game toast notifications |
+| `telemetry` | `ThoriumStutterHunter`, `ThoriumPhaseTimer`, `ThoriumGcWatcher` | Per-frame phase breakdown, GC pause correlation, instant stutter attribution |
 | `config` | `ThoriumConfig`, `ThoriumPresets` | Atomic settings persistence, hardware preset profiles |
 | `version` | `VersionBridge`, `DefaultVersionBridge`, `GameVersion`, `Era`, `GameVersionDetector`, `VersionBridgeRegistry` | Version abstraction and detection |
 | `mixin` | `HyperionMixinPlugin`, `core/*`, `legacy/*`, `modern/*` | Engine hooks and era routing |

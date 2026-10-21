@@ -108,6 +108,10 @@ public final class ThoriumFramePacer {
         }
 
         if (now < nextFrameDeadlineNanos) {
+            // The Stutter Hunter needs to know how much of the frame was spent
+            // waiting for the deadline: a frame that is long because the pacer
+            // slept is not a stutter, it is the frame cap doing its job.
+            long waitStart = System.nanoTime();
             long sleepNanos = (nextFrameDeadlineNanos - now) - SPIN_MARGIN_NANOS;
             if (sleepNanos > 0L) {
                 LockSupport.parkNanos(sleepNanos);
@@ -115,6 +119,7 @@ public final class ThoriumFramePacer {
             while (System.nanoTime() < nextFrameDeadlineNanos) {
                 Thread.onSpinWait();
             }
+            dev.hyperionfps.telemetry.ThoriumPhaseTimer.addSwap(System.nanoTime() - waitStart);
         }
 
         // Advance by whole periods so the schedule cannot drift, and skip every period

@@ -181,6 +181,12 @@ public final class ThoriumFabricHooks {
                 + (spikes == 0 ? "§a0" : "§c" + spikes) + " §8• §7RAM: §e" + usedMemMiB + "MB" + ThoriumGuiManager.getEcoBadge();
 
         graphics.drawString(font, statsLine, startX + 6, graphBottom + 5, 0xFFCFD8DC, false);
+
+        // The toast line: the Stutter Hunter explains a freeze here.
+        String toast = dev.hyperionfps.gui.ThoriumToastQueue.activeToast();
+        if (!toast.isEmpty()) {
+            graphics.drawString(font, toast, startX + 6, graphBottom + 17, 0xFFFFC107, false);
+        }
     }
 
     private static void registerLifecycleEvents() {

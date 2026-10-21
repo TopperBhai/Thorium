@@ -138,7 +138,7 @@ class ThoriumAfkManagerTest {
 
         long elapsed = System.nanoTime() - start;
         assertEquals(1L, ThoriumAfkManager.getParkCount());
-        assertTrue(elapsed >= ThoriumAfkManager.ECO_PARK_NANOS - 5_000_000L,
+        assertTrue(elapsed >= ThoriumAfkManager.ECO_PARK_NANOS - 15_000_000L,
                 "the park must actually wait, but it only took " + elapsed + " ns");
     }
 

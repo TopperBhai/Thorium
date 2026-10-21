@@ -60,6 +60,15 @@ public final class HyperionFPS implements ClientModInitializer {
             LOGGER.warn("AFK power saver could not be installed: {}", failure.toString());
         }
 
+        // The Stutter Hunter needs the JVM's garbage-collection notifications to
+        // tell a collection pause apart from a rendering problem.
+        try {
+            dev.hyperionfps.telemetry.ThoriumGcWatcher.install();
+            dev.hyperionfps.telemetry.ThoriumStutterHunter.install();
+        } catch (Throwable failure) {
+            LOGGER.warn("Stutter hunter could not be installed: {}", failure.toString());
+        }
+
         // Probe the mods that Thorium has to coexist with (shader packs, competing
         // renderers) before anything else can be switched on.
         try {

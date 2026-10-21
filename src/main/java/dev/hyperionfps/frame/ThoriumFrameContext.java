@@ -90,8 +90,19 @@ public final class ThoriumFrameContext {
         if (ThoriumAfkManager.isEcoActive()) {
             ThoriumFrametimeTracker.resetClock();
         } else {
+            // The garbage-collection counters are read first, so a collection that
+            // happened during this frame is attributed to this frame.
+            dev.hyperionfps.telemetry.ThoriumGcWatcher.poll();
             ThoriumFrametimeTracker.recordFrame();
+            // The phase breakdown of the frame that just ended is still in the timer:
+            // the Stutter Hunter looks at it before the timer is reset for the new
+            // frame.
+            dev.hyperionfps.telemetry.ThoriumStutterHunter.onFrameEnd(
+                    lastClientDeltaNanos, now - lastClientDeltaNanos);
         }
+
+        // A new frame starts: clear the breakdown for it.
+        dev.hyperionfps.telemetry.ThoriumPhaseTimer.beginFrame(now);
 
         // The AFK governor has to know the focus state before the pacer decides how
         // long this frame may take.
@@ -123,6 +134,9 @@ public final class ThoriumFrameContext {
         lastWorldFrameNanos = now;
         lastWorldDeltaNanos = deltaNanos;
         WORLD_FRAMES.incrementAndGet();
+
+        // The world render has started, so everything up to now was the client tick.
+        dev.hyperionfps.telemetry.ThoriumPhaseTimer.markWorldFrameStart(now);
 
         // A different world (or a world that was left and re-entered) restarts the
         // warm-up window: the first seconds of a new world are the most expensive

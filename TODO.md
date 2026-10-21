@@ -14,7 +14,7 @@
 | :--- | :--- | :--- | :--- | :--- |
 | **Step 1** | **Core Config & Settings Console Matrix** | `ThoriumConfig`, `ThoriumFeatureToggles`, `ThoriumPresets`, `ThoriumSettingRows`, `ThoriumVideoSettingsScreen` (all 5 nodes), `ThoriumMemoryOptimizer` | ✅ Done | `:26.3:test` (155 tests), `test` (5/5), `buildAll` (5 jars) |
 | **Step 2** | **AFK Battery & Power Saver (Stealth AFK™)** | `ThoriumAfkManager`, `ThoriumFramePacer`, `WindowContext` | ✅ Done | `ThoriumAfkManagerTest` (12 tests), `test` (5/5), `buildAll` (5 jars) |
-| **Step 3** | **Instant Lag Spike Alert (Nuclear Stutter Hunter™)** | `ThoriumFrameContext`, `ThoriumStutterHunter`, `GarbageCollectorMXBean` | ⏳ Pending | `StutterHunterTest`, attribution parsing |
+| **Step 3** | **Instant Lag Spike Alert (Nuclear Stutter Hunter™)** | `ThoriumFrameContext`, `ThoriumStutterHunter`, `ThoriumGcWatcher`, `ThoriumPhaseTimer`, `ThoriumToastQueue` | ✅ Done | `ThoriumStutterHunterTest` (11 tests), `test` (5/5), `buildAll` (5 jars) |
 | **Step 4** | **Storage Room & Item Frame Culling** | `StorageCullingEngine`, `AsyncOcclusionCuller`, block-entity dispatch | ⏳ Pending | `StorageCullingTest`, occlusion distance test |
 | **Step 5** | **Mob Farm & Swarm Optimizer** | `MobFarmOptimizer`, `ThoriumEntityLodThrottler`, `ThoriumSoundGovernor` | ⏳ Pending | `MobFarmOptimizerTest`, cluster grouping test |
 | **Step 6** | **Explosion & Firework Shield** | `ExplosionShield`, `ThoriumParticleBudget` | ⏳ Pending | `ExplosionShieldTest`, quad cap verification |
@@ -106,23 +106,26 @@
 
 ---
 
-### 🟦 Step 3: Instant Lag Spike Alert (Nuclear Stutter Hunter™)
-- [ ] High-resolution timing checkpoints in `ThoriumFrameContext`:
-  - Phase 1: Input & client tick (`phaseTickNanos`).
-  - Phase 2: Entity & block entity dispatch (`phaseEntitiesNanos`).
-  - Phase 3: Chunk upload & geometry processing (`phaseChunkUploadNanos`).
-  - Phase 4: Terrain & particle draw (`phaseRenderNanos`).
-  - Phase 5: Frame pacing & buffer swap wait (`phaseSwapNanos`).
-- [ ] GC Pause Correlation:
+### 🟦 Step 3: Instant Lag Spike Alert (Nuclear Stutter Hunter™) — ✅ DONE (2026-10-21)
+- [x] High-resolution timing checkpoints in `ThoriumFrameContext`:
+  - Phase 1: Input & client tick (`tickNanos`).
+  - Phase 2: Entity & block entity dispatch (`entitiesNanos`).
+  - Phase 3: Chunk upload & geometry processing (`chunkUploadNanos`).
+  - Phase 4: Terrain & world render (`renderNanos`).
+  - Phase 5: Frame pacing & buffer swap wait (`swapNanos`).
+  - *Delivered as:* `ThoriumPhaseTimer` tracks disjoint execution intervals without per-frame allocation.
+- [x] GC Pause Correlation:
   - Register `NotificationListener` on `ManagementFactory.getGarbageCollectorMXBeans()`.
   - Capture duration and timestamp of Young Gen / Old Gen sweeps without per-frame overhead.
-- [ ] Create `dev.hyperionfps.telemetry.ThoriumStutterHunter`:
+  - *Delivered as:* `ThoriumGcWatcher` maintains a bounded circular buffer of recent GC pauses and correlates pauses falling inside the stutter window.
+- [x] Create `dev.hyperionfps.telemetry.ThoriumStutterHunter`:
   - Trigger when a frame meets the stutter condition (`max(30ms, 2.5 * avg) && jitter > 12ms`).
-  - Attribute spike to dominant phase: `[GC: 38ms | Mob Animations: 16ms | Terrain: 6ms]`.
-  - Publish toast alert to HUD (`ThoriumGuiManager`).
-- [ ] JUnit test suite: `ThoriumStutterHunterTest`.
-- [ ] Verification: `./gradlew :26.3:test`.
-- [ ] Doc Sync: Update `TODO.md`, `spec.md`, `state.md`, `AGENTS.md`.
+  - Attribute spike to dominant phases: e.g. `[GC: 38ms | Entities: 16ms | Chunk: 6ms]`.
+  - Publish toast alert to HUD via `ThoriumToastQueue`.
+  - Render toast banner across all 5 version HUD renderers (`ThoriumModernHudRenderer` / `ThoriumFabricHooks`).
+- [x] JUnit test suite: `ThoriumStutterHunterTest` (11 tests).
+- [x] Verification: `./gradlew :26.3:test`, `./gradlew test` (5/5 nodes green, 178 tests), `./gradlew buildAll` (5 jars).
+- [x] Doc Sync: Update `TODO.md`, `spec.md`, `state.md`, `AGENTS.md`.
 
 ---
 
@@ -225,11 +228,12 @@
 
 ## Operating Protocol for AI Agents
 
-1. **Atomic Execution:** Execute only one step at a time.
+1. **Atomic Execution:** Execute strictly one step at a time.
 2. **Compile & Test Gate:** After modifying code, run `./gradlew :26.3:test` (or full `./gradlew test` when version-specific code is touched).
 3. **Mandatory Documentation Update:** Before completing each step, update:
    - `TODO.md` (check off completed items, update status table)
    - `spec.md` (update requirements / specifications)
    - `state.md` (update current status board)
    - `AGENTS.md` (update any new conventions, rules, or gotchas)
-4. **Context Continuity:** Ensure any new AI session reading these markdown files can immediately understand what was just completed and what the exact next step is.
+4. **Hard Stop After Every Step:** After updating all markdown files, **STOP execution immediately** and report the outcome to the user. Do not begin the next step without explicit user instruction.
+5. **Context Continuity:** Ensure any new AI session reading these markdown files can immediately understand what was just completed and what the exact next step is.

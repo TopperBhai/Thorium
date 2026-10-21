@@ -27,6 +27,9 @@ public final class ThoriumFrametimeTracker {
     private static int totalStutterSpikes = 0;
     private static float smoothnessScore = 100.0f;
 
+    /** Whether the most recently recorded frame was classified as a stutter. */
+    private static volatile boolean lastFrameWasStutter;
+
     private ThoriumFrametimeTracker() {
     }
 
@@ -59,6 +62,7 @@ public final class ThoriumFrametimeTracker {
         FRAME_DURATIONS_MS[headIndex] = deltaMs;
         FRAME_IS_STUTTER[headIndex] = isStutter;
         headIndex = (headIndex + 1) & INDEX_MASK;
+        lastFrameWasStutter = isStutter;
 
         // Update statistics across current window
         float sum = 0.0f;
@@ -141,5 +145,16 @@ public final class ThoriumFrametimeTracker {
 
     public static float getSmoothnessScore() {
         return smoothnessScore;
+    }
+
+    /**
+     * Whether the most recently recorded frame was classified as a stutter.
+     *
+     * <p>Used by the Stutter Hunter, which has to agree with the tracker about what
+     * a stutter is - two different definitions would produce two different
+     * opinions about the same frame.</p>
+     */
+    public static boolean wasLastFrameStutter() {
+        return lastFrameWasStutter;
     }
 }

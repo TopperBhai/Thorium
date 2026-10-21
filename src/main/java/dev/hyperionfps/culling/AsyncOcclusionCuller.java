@@ -138,6 +138,15 @@ public final class AsyncOcclusionCuller {
             return false;
         }
 
+        // The Stutter Hunter needs to know how much of the frame went into
+        // visibility decisions - a mob farm is the classic offender.
+        long start = System.nanoTime();
+        boolean culled = decideEntityCull(entity, camX, camY, camZ);
+        dev.hyperionfps.telemetry.ThoriumPhaseTimer.addEntities(System.nanoTime() - start);
+        return culled;
+    }
+
+    private static boolean decideEntityCull(Entity entity, double camX, double camY, double camZ) {
         AABB box = entity.getBoundingBox();
 
         // 1. Frustum Culling
@@ -188,6 +197,13 @@ public final class AsyncOcclusionCuller {
             return false;
         }
 
+        long start = System.nanoTime();
+        boolean culled = decideBlockEntityCull(blockEntity, camX, camY, camZ);
+        dev.hyperionfps.telemetry.ThoriumPhaseTimer.addEntities(System.nanoTime() - start);
+        return culled;
+    }
+
+    private static boolean decideBlockEntityCull(BlockEntity blockEntity, double camX, double camY, double camZ) {
         BlockPos pos = blockEntity.getBlockPos();
         double bx = pos.getX() + 0.5;
         double by = pos.getY() + 0.5;
