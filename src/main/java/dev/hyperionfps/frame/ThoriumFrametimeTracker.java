@@ -89,6 +89,18 @@ public final class ThoriumFrametimeTracker {
     }
 
     /**
+     * Restarts the frame clock without recording a sample.
+     *
+     * <p>Used while an intentional throttle (the AFK power saver) holds the client
+     * at a low framerate: the measurement is suspended so that the statistics keep
+     * describing the frames the player actually experienced, and the first frame
+     * after the throttle ends is not mistaken for a 90 ms stutter.</p>
+     */
+    public static void resetClock() {
+        lastTimestampNanos = System.nanoTime();
+    }
+
+    /**
      * Gets a historical frametime sample relative to the most recent frame.
      *
      * @param offsetFromLatest 0 is the most recent frame, (SAMPLE_COUNT - 1) is oldest

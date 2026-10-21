@@ -97,7 +97,7 @@ public final class ThoriumModernHudRenderer {
         // -------------------------------------------------------------
         String statsLine = "§7Avg: §f" + String.format("%.1f", avgMs) + "ms §8• §7Max: "
                 + (maxMs > 16.6f ? "§c" : "§7") + String.format("%.1f", maxMs) + "ms §8• §7Spikes: "
-                + (spikes == 0 ? "§a0" : "§c" + spikes) + " §8• §7RAM: §e" + usedMemMiB + "MB";
+                + (spikes == 0 ? "§a0" : "§c" + spikes) + " §8• §7RAM: §e" + usedMemMiB + "MB" + ThoriumGuiManager.getEcoBadge();
 
         graphics.text(font, statsLine, startX + 6, graphBottom + 5, 0xFFCFD8DC, false);
     }

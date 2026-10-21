@@ -180,7 +180,12 @@ F:\Toperion Optimization\
 
 `src/main/java/` may only import these Minecraft types (verified by the current tree):
 `Minecraft`, `Options`, `Frustum`, `SoundInstance`, `BlockPos`, `Component`,
-`SoundSource`, `Entity`, `Player`, `BlockEntity`, `BlockState`, `BlockGetter`, `AABB`.
+`SoundSource`, `Entity`, `Player`, `BlockEntity`, `BlockState`, `BlockGetter`, `AABB`,
+`MouseHandler`, `KeyboardHandler`.
+
+`MouseHandler` and `KeyboardHandler` are only used as **mixin targets** (the AFK
+activity hooks). Their methods are referenced without a descriptor, because the
+descriptor changed between the versions — see §10.18.
 
 **Traps inside that surface** — these compile on one era and not the other:
 
@@ -522,6 +527,25 @@ is an incomplete change.
 17. **A config read is `synchronized`.** `ThoriumConfig#getBoolean` takes a lock, so
     never call it from a per-frame hook. Cache the decision in a field when the screen
     is built and read the field in the tick hook.
+18. **A mixin selector may omit the descriptor — and the handler may omit the
+    parameters.** This is the escape hatch for a method whose signature changed
+    between the Minecraft versions:
+
+    ```java
+    @Inject(method = "onMove", at = @At("HEAD"), require = 0)
+    private void hyperionfps$onMouseMove(CallbackInfo ci) { ... }
+    ```
+
+    The selector matches by **name** on every version, and the handler declares
+    none of the target's parameters, so one core mixin covers all five nodes even
+    though `MouseHandler#onMove` is `(JDD)V` on 1.21.1 … 26.2 and `(JDDDD)V` on
+    26.3. The build-time audit accepts a name-only selector as long as *some*
+    method with that name exists on the node.
+
+    **The corollary:** a selector without a descriptor must match on *every* node
+    the mixin is registered for. `onPress` only exists on 1.21.1 and `onButton`
+    only on 1.21.11 / 26.x, so those two need their own era-specific mixin
+    (`LegacyAfkClickMixin`, `ModernAfkClickMixin`) instead of one shared class.
 
 ### Safe mode — the emergency escape hatch
 

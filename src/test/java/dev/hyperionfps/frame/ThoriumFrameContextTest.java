@@ -36,7 +36,7 @@ class ThoriumFrameContextTest {
     @Test
     void clientFrameIsCounted() {
         long before = ThoriumFrameContext.clientFrameCount();
-        ThoriumFrameContext.beginClientFrame(false);
+        ThoriumFrameContext.beginClientFrame(false, true);
         assertEquals(before + 1, ThoriumFrameContext.clientFrameCount());
     }
 

@@ -27,8 +27,7 @@ public final class ThoriumGuiManager {
     }
 
     /** Toggles Extreme FPS Mode on or off and returns the notification component. */
-    public static Component toggleExtremeFpsMode() {
-        boolean newState = !AsyncOcclusionCuller.isExtremeFpsMode();
+    public static Component toggleExtremeFpsMode() {        boolean newState = !AsyncOcclusionCuller.isExtremeFpsMode();
         AsyncOcclusionCuller.setExtremeFpsMode(newState);
 
         if (newState) {
@@ -36,6 +35,16 @@ public final class ThoriumGuiManager {
         } else {
             return Component.literal("§2[§aThorium§2] §cExtreme FPS Mode: OFF §7(Vanilla Visuals Restored)");
         }
+    }
+
+    /**
+     * The AFK power-saver badge for the HUD.
+     *
+     * <p>Empty while the eco throttle is idle, so the HUD line does not change when
+     * nothing is happening.</p>
+     */
+    public static String getEcoBadge() {
+        return dev.hyperionfps.frame.ThoriumAfkManager.getEcoBadge();
     }
 
     /** Formats a full diagnostic performance summary for overlays and debug screens. */

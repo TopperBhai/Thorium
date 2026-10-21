@@ -70,10 +70,12 @@ public final class ThoriumFrameContext {
      * Opens a client frame: the main loop iteration that produced the previous frame
      * has just finished.
      *
-     * @param worldLoaded whether a world is currently loaded; the frame pacer only
-     *                    runs in a world, so the menus are never throttled
+     * @param worldLoaded   whether a world is currently loaded; the frame pacer only
+     *                      runs in a world, so the menus are never throttled
+     * @param windowFocused whether the game window currently has the focus; the AFK
+     *                      power saver throttles the client as soon as it does not
      */
-    public static void beginClientFrame(boolean worldLoaded) {
+    public static void beginClientFrame(boolean worldLoaded, boolean windowFocused) {
         long now = System.nanoTime();
         lastClientDeltaNanos = now - lastClientFrameNanos;
         lastClientFrameNanos = now;
@@ -81,9 +83,26 @@ public final class ThoriumFrameContext {
 
         // Record first, pace second: the recorded frametime then contains the pacing
         // sleep, which is what the player actually experiences.
-        ThoriumFrametimeTracker.recordFrame();
+        //
+        // The AFK power saver is the one exception: its 90 ms park is an intentional
+        // power saving, not a performance problem, so the measurement is suspended
+        // while it runs and the statistics keep describing real gameplay.
+        if (ThoriumAfkManager.isEcoActive()) {
+            ThoriumFrametimeTracker.resetClock();
+        } else {
+            ThoriumFrametimeTracker.recordFrame();
+        }
+
+        // The AFK governor has to know the focus state before the pacer decides how
+        // long this frame may take.
+        ThoriumAfkManager.update(now, windowFocused);
+
         if (worldLoaded) {
             ThoriumFramePacer.paceFrame();
+        } else {
+            // The menus are never frame-paced, but they are still parked while the
+            // player is away - that is where a left-open game burns a whole core.
+            ThoriumAfkManager.parkEcoFrame();
         }
     }
 

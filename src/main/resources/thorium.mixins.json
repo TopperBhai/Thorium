@@ -13,6 +13,8 @@
     "core.MinecraftFramerateUncapperMixin",
     "core.MinecraftFrameBoundaryMixin",
     "core.ParticleEngineMixin",
-    "core.SmartLeavesCullingMixin"${mixin_legacy}${mixin_modern}
+    "core.SmartLeavesCullingMixin",
+    "core.AfkMouseActivityMixin",
+    "core.AfkKeyboardActivityMixin"${mixin_legacy}${mixin_modern}
   ]
 }

@@ -31,7 +31,7 @@
 | Mod coexistence | 🟢 Fixed | Sodium/Embeddium and shader packs are detected; Thorium stands down (D-1/D-2) |
 | Startup log honesty | 🟢 Fixed | A live subsystem report replaces the hardcoded claims (A-13/D-4) |
 | Dead subsystems | 🔴 Open | 7 implemented subsystems still have **no call site** — see §4.2 |
-| Headline Innovation Plan | 🟡 In Progress | **Step 1 done** (config + settings matrix); Step 2 (AFK Eco) is next |
+| Headline Innovation Plan | 🟡 In Progress | **Steps 1–2 done** (config matrix + AFK Eco); Step 3 (Stutter Hunter) is next |
 | Settings console duplication | 🟢 Fixed | The rows and the presets live in shared code now — 5 screens, one catalogue |
 | Performance validation | 🟡 Unverified | No in-game benchmark harness or capture tooling (G-7) |
 | Release tagging | 🔴 Missing | No git tags for 0.1.1 (G-11) |
@@ -50,8 +50,8 @@ but not yet connected to the game (see §4.2), plus the missing benchmark harnes
 | Command | Result |
 | :--- | :--- |
 | `./gradlew :26.3:compileJava` | ✅ `EXIT=0` |
-| `./gradlew :26.3:test` | ✅ `BUILD SUCCESSFUL` — **155 tests**, 0 failures, 0 errors, 0 skipped |
-| `./gradlew test` | ✅ green on **all five** nodes (155 tests each) |
+| `./gradlew :26.3:test` | ✅ `BUILD SUCCESSFUL` — **167 tests**, 0 failures, 0 errors, 0 skipped |
+| `./gradlew test` | ✅ green on **all five** nodes (167 tests each) |
 | `./gradlew buildAll` | ✅ `BUILD SUCCESSFUL` — 5 jars in `build/dist/` |
 
 Verified artifacts in `build/dist/`:
@@ -81,8 +81,8 @@ task** — only `:1.21.1` and `:1.21.11` do. Use `assemble` / `build` for the mo
 
 | Metric | Count |
 | :--- | ---: |
-| Shared main sources (`src/main/java`) | 69 files |
-| Shared test sources (`src/test/java`) | 33 classes / 155 tests |
+| Shared main sources (`src/main/java`) | 72 files |
+| Shared test sources (`src/test/java`) | 34 classes / 167 tests |
 | Version-specific sources | 19 files/node (26.x), 21 (1.21.1), 20 (1.21.11) |
 | Version nodes | 5 |
 | Git commits | 6 (this cycle's work is uncommitted) |
@@ -91,7 +91,7 @@ task** — only `:1.21.1` and `:1.21.11` do. Use `assemble` / `build` for the mo
 | Package | State | Tests | Notes |
 | :--- | :--- | :--- | --- |
 | `core` | ✅ | `ThreadGovernorTest` | Thread capture, priority elevation, telemetry kill-switch |
-| `frame` | ✅ | `FramePacingTest`, `ThoriumFrametimeTrackerTest` | 128-sample tracker, sleep→spin pacer |
+| `frame` | ✅ | `FramePacingTest`, `ThoriumFrametimeTrackerTest`, `ThoriumFrameContextTest`, `ThoriumAfkManagerTest` | 128-sample tracker, sleep→spin pacer, authoritative frame context, AFK power saver |
 | `culling` | ✅ | `CullingEngineTest`, `OcclusionGridTest`, `SectionCullingEngineTest` | Grid, raycast, BVH, frustum cache |
 | `memory` | ✅ | `DirectBufferPoolTest`, `IdleJanitorTest`, `ThoriumMemoryOptimizerTest`, `ZeroAllocationPoolTest` | Direct pools, off-heap release, janitor |
 | `chunk` | ✅ | `ThoriumChunkUploadPacerTest` | Dual-budget upload pacer |
@@ -606,7 +606,7 @@ Organized in [`TODO.md`](./TODO.md) to deliver maximum player-facing value in co
 | Step | Headline Feature | Scope | Status | Gate |
 | :--- | :--- | :--- | :--- | :--- |
 | **Step 1** | **Core Config & Settings Console Matrix** | 10 headline keys, presets, all 5 `ThoriumVideoSettingsScreen`s, Purge RAM button | ✅ **Done** | `ThoriumConfigTest` (155 tests), `test` (5/5), `buildAll` |
-| **Step 2** | **AFK Battery & Power Saver (Stealth AFK™)** | Inactivity / unfocused 10 FPS cap, CPU park, 0 ms wake | 🟡 **Next** | `AfkPowerSaverTest` |
+| **Step 2** | **AFK Battery & Power Saver (Stealth AFK™)** | Inactivity / unfocused 10 FPS cap, CPU park, 0 ms wake | ✅ **Done** | `ThoriumAfkManagerTest` (12 tests), `test` (5/5) |
 | **Step 3** | **Instant Lag Spike Alert (Nuclear Stutter Hunter™)** | 5-phase breakdown, GC pause listener, HUD toast | ⏳ Pending | `StutterHunterTest` |
 | **Step 4** | **Storage Room & Item Frame Culling** | Container & item frame occlusion and distance culling | ⏳ Pending | `StorageCullingTest` |
 | **Step 5** | **Mob Farm & Swarm Optimizer** | Dense swarm animation decoupling & sound dampening | ⏳ Pending | `MobFarmOptimizerTest` |
@@ -639,10 +639,12 @@ Organized in [`TODO.md`](./TODO.md) to deliver maximum player-facing value in co
 | New — Nuclear preset fast math | ✅ The preset no longer switches fast math back off right after switching it on |
 | Android launch crash | ✅ Mitigated — safe-mode kill switch + 3 native-call guards |
 | **Roadmap Step 1** | ✅ Config + settings matrix — 10 headline keys persisted, shared `ThoriumFeatureToggles` registry, shared `ThoriumPresets`, shared `ThoriumSettingRows` catalogue rendered by all five screens |
+| **Roadmap Step 2** | ✅ AFK Battery & Power Saver — `ThoriumAfkManager` parks the render thread for 90 ms per frame (in 16 ms slices) when the window is unfocused or the player is idle for 60 s; mouse, click and key activity wake it immediately. New mixins: `core/AfkMouseActivityMixin`, `core/AfkKeyboardActivityMixin`, `legacy/LegacyAfkClickMixin`, `modern/ModernAfkClickMixin`. |
 ## 7. Changelog
 
 | Commit | Date | Change |
 | :--- | :--- | :--- |
+| *(uncommitted)* | 2026-10-21 | **Roadmap Step 2** — the AFK power saver throttles the client to ~10 FPS and parks the render thread while the player is away; mouse movement, clicks and key presses wake it immediately. The frametime measurement is suspended while the throttle runs so an intentional park is not counted as a stutter. |
 | *(uncommitted)* | 2026-10-21 | **Roadmap Step 1** — the ten headline feature switches are persisted and wired three ways, the presets and the settings rows moved into shared code, and the console rows for the not-yet-implemented features report themselves as `NOT AVAILABLE` instead of pretending to work. |
 | *(uncommitted)* | 2026-10-21 | Settings console: the row list scrolls inside the band above the footer bar so no row is drawn over the footer on a short window (all five nodes); the Nuclear preset keeps fast math enabled; the one-time invite is recorded as shown when the card opens. |
 | *(uncommitted)* | 2026-10-21 | Fixed the world-wide chunk-reload storm (G-14): the adaptive render distance no longer raises the distance, is opt-in and rate-limited. Added the one-time community invite. |
@@ -661,6 +663,7 @@ Organized in [`TODO.md`](./TODO.md) to deliver maximum player-facing value in co
 
 | Date | Action |
 | :--- | :--- |
+| 2026-10-21 | **Roadmap Step 2 done** — `ThoriumAfkManager` (shared) owns the idle clock, the focus state and the park. Activity is reported by three new mixins: `core/AfkMouseActivityMixin` and `core/AfkKeyboardActivityMixin` (one core mixin each, using a descriptor-less selector so the changed 26.3 `onMove` signature is covered) plus `legacy/LegacyAfkClickMixin` (1.21.1 `onPress`, 1.21.11 `onButton`) and `modern/ModernAfkClickMixin` (`onButton`). The build-time mixin audit proves every one of those targets exists on its node. The 90 ms park is spent in 16 ms slices so a click is noticed within one slice. The frametime tracker is suspended during the throttle (`ThoriumFrametimeTracker.resetClock()`). 12 new tests; the suite grew from 155 to **167 tests** across 34 classes. |
 | 2026-10-21 | **Roadmap Step 1 done** — `ThoriumFeatureToggles` (the shared registry of the eight headline switches, the AFK timeout and the weather mode), `ThoriumPresets` (the three hardware profiles, moved out of the five per-version screens) and `ThoriumSettingRows` (the shared row catalogue) are new shared classes. The five `ThoriumVideoSettingsScreen` files lost ~360 lines each and now only contain the era-specific widget and drawing code. The ten headline switches are persisted, wired three ways, and each has a console row that reports `NOT AVAILABLE` until its implementation lands. `ThoriumSubsystemReport` lists them as `UNWIRED` until then. The *Purge RAM Now* button now reports the measured amount instead of a fabricated 12 MB minimum. Test suite grew from 130 to **155 tests** across 33 classes; `buildAll` green on all five nodes. |
 | 2026-10-20 | `AGENTS.md`, `spec.md`, `state.md` created from a full codebase survey. Build (`:26.3:compileJava`), tests (`:26.3:test`, 79/79 green) and `buildAll` (5 jars) all verified. |
 | 2026-10-20 | Bytecode audit of `ParticleEngine` across all 5 Minecraft jars via `javap` found `tickParticleList` exists on **1.21.1 only** — the particle ticking injection is inert on 1.21.11/26.1/26.2/26.3 (G-2). Recorded as the P0 headline defect. |

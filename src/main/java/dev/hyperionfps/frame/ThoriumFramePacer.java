@@ -86,6 +86,14 @@ public final class ThoriumFramePacer {
      * re-anchors the schedule and returns immediately.</p>
      */
     public static void paceFrame() {
+        // The AFK power saver outranks the player's frame cap: while the player is
+        // away the client parks instead of running at the configured rate.
+        if (ThoriumAfkManager.isEcoActive()) {
+            nextFrameDeadlineNanos = 0L;
+            ThoriumAfkManager.parkEcoFrame();
+            return;
+        }
+
         long period = targetFrameTimeNanos;
         if (!enabled || period <= 0L) {
             nextFrameDeadlineNanos = 0L;

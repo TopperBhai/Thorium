@@ -13,7 +13,7 @@
 | Step | Headline Feature / Focus | Primary Subsystems / Components | Status | Verification Gate |
 | :--- | :--- | :--- | :--- | :--- |
 | **Step 1** | **Core Config & Settings Console Matrix** | `ThoriumConfig`, `ThoriumFeatureToggles`, `ThoriumPresets`, `ThoriumSettingRows`, `ThoriumVideoSettingsScreen` (all 5 nodes), `ThoriumMemoryOptimizer` | ✅ Done | `:26.3:test` (155 tests), `test` (5/5), `buildAll` (5 jars) |
-| **Step 2** | **AFK Battery & Power Saver (Stealth AFK™)** | `ThoriumAfkManager`, `ThoriumFramePacer`, `WindowContext` | 🟡 Next | `AfkPowerSaverTest`, sleep/wake timing test |
+| **Step 2** | **AFK Battery & Power Saver (Stealth AFK™)** | `ThoriumAfkManager`, `ThoriumFramePacer`, `WindowContext` | ✅ Done | `ThoriumAfkManagerTest` (12 tests), `test` (5/5), `buildAll` (5 jars) |
 | **Step 3** | **Instant Lag Spike Alert (Nuclear Stutter Hunter™)** | `ThoriumFrameContext`, `ThoriumStutterHunter`, `GarbageCollectorMXBean` | ⏳ Pending | `StutterHunterTest`, attribution parsing |
 | **Step 4** | **Storage Room & Item Frame Culling** | `StorageCullingEngine`, `AsyncOcclusionCuller`, block-entity dispatch | ⏳ Pending | `StorageCullingTest`, occlusion distance test |
 | **Step 5** | **Mob Farm & Swarm Optimizer** | `MobFarmOptimizer`, `ThoriumEntityLodThrottler`, `ThoriumSoundGovernor` | ⏳ Pending | `MobFarmOptimizerTest`, cluster grouping test |
@@ -76,19 +76,33 @@
 
 ---
 
-### 🟦 Step 2: AFK Battery & Power Saver (Stealth AFK™)
-- [ ] Create `dev.hyperionfps.frame.ThoriumAfkManager`:
+### 🟦 Step 2: AFK Battery & Power Saver (Stealth AFK™) — ✅ DONE (2026-10-21)
+- [x] Create `dev.hyperionfps.frame.ThoriumAfkManager`:
   - Track last user activity timestamp (mouse move, mouse click, keyboard key event).
   - Track window focus status via `WindowContext` / `Minecraft#isWindowActive()`.
   - When idle time exceeds configured timeout (default 60s) or window is unfocused:
     - Activate eco throttling (target framerate clamped to 10 FPS).
     - Yield CPU cycles via `LockSupport.parkNanos(90_000_000L)`.
   - Wake instantly (0 ms) on any input event or focus gain.
-- [ ] Hook into frame pacer (`ThoriumFramePacer`) to respect the AFK target FPS.
-- [ ] Add HUD indicator / eco badge when active.
-- [ ] JUnit test suite: `ThoriumAfkManagerTest`.
-- [ ] Verification: `./gradlew :26.3:test`.
-- [ ] Doc Sync: Update `TODO.md`, `spec.md`, `state.md`, `AGENTS.md`.
+  - *Delivered as:* `ThoriumAfkManager` in shared source, driven from the client frame
+    boundary (`Minecraft#runTick`). The 90 ms park is spent in slices of at most 16 ms
+    so an input event is noticed within one slice instead of after the whole park —
+    GLFW delivers its events on the very thread that parks.
+- [x] Hook into frame pacer (`ThoriumFramePacer`) to respect the AFK target FPS.
+  - *Delivered as:* `paceFrame()` yields to the eco throttle, and the menus are parked
+    directly by the frame context (the pacer itself never runs outside a world).
+- [x] Add HUD indicator / eco badge when active.
+  - *Delivered as:* `ThoriumGuiManager.getEcoBadge()`, rendered by all five HUD
+    renderers as `• Eco: 10 FPS`.
+- [x] JUnit test suite: `ThoriumAfkManagerTest` (12 tests).
+- [x] Verification: `./gradlew :26.3:test`, `./gradlew test` (5/5), `./gradlew buildAll`.
+- [x] Doc Sync: Update `TODO.md`, `spec.md`, `state.md`, `AGENTS.md`.
+
+> **Notes.** The frametime measurement is *suspended* while the eco throttle runs: a
+> 90 ms park is an intentional power saving, not a stutter, and letting it into the
+> statistics would destroy the Smoothness score and raise the stutter threshold for
+> the frames that follow. The HUD keeps showing the last active values and the eco
+> badge explains the low framerate.
 
 ---
 

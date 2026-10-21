@@ -28,6 +28,7 @@ public abstract class MinecraftFrameBoundaryMixin {
     private void hyperionfps$openClientFrame(boolean advanceGameTime, CallbackInfo ci) {
         Minecraft client = (Minecraft) (Object) this;
         // The menus are never throttled: the pacer only runs while a world is loaded.
-        ThoriumFrameContext.beginClientFrame(client.level != null);
+        // The focus state drives the AFK power saver, which throttles both.
+        ThoriumFrameContext.beginClientFrame(client.level != null, client.isWindowActive());
     }
 }

@@ -52,6 +52,14 @@ public final class HyperionFPS implements ClientModInitializer {
         AsyncOcclusionCuller.init();
         LOGGER.info("Async Occlusion Culling Engine online: daemon thread running");
 
+        // The AFK power saver is live from here on: it hooks the mouse and keyboard
+        // inputs and parks the render thread while the player is away.
+        try {
+            dev.hyperionfps.frame.ThoriumAfkManager.install();
+        } catch (Throwable failure) {
+            LOGGER.warn("AFK power saver could not be installed: {}", failure.toString());
+        }
+
         // Probe the mods that Thorium has to coexist with (shader packs, competing
         // renderers) before anything else can be switched on.
         try {
