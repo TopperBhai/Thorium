@@ -54,14 +54,19 @@ public final class ThoriumGuiManager {
         long maxMemMiB = runtime.maxMemory() / (1024 * 1024);
 
         return String.format(
-                "Thorium (Th-90) | Memory: %d/%d MiB | Extreme Mode: %s | Culling: %s (Scale: %.2fx) | GL Skips: %d | HUD Batched: %d",
+                "Thorium (Th-90) | Memory: %d/%d MiB | Extreme Mode: %s | Culling: %s (Scale: %.2fx) | GL Skips: %d | HUD Batched: %d | Storage Cull: %d | Particle Shield: %d | Reflex: %d",
                 usedMemMiB,
                 maxMemMiB,
                 AsyncOcclusionCuller.isExtremeFpsMode() ? "ON" : "OFF",
                 AsyncOcclusionCuller.isEnabled() ? "ACTIVE" : "OFF",
                 AsyncOcclusionCuller.getDynamicDistanceScale(),
                 GlStateTracker.getRedundantTextureBindsAvoided() + GlStateTracker.getRedundantProgramsAvoided(),
-                HudBatcher.getDrawCallsSaved()
+                HudBatcher.getDrawCallsSaved(),
+                dev.hyperionfps.culling.StorageCullingEngine.getContainersCulled()
+                        + dev.hyperionfps.culling.StorageCullingEngine.getItemFramesCulled(),
+                dev.hyperionfps.particle.ExplosionShield.getCulledRedundant()
+                        + dev.hyperionfps.particle.ExplosionShield.getCulledOverRate(),
+                dev.hyperionfps.input.ThoriumReflexController.getFreshInputFrames()
         );
     }
 }

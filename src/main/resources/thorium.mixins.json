@@ -15,6 +15,10 @@
     "core.ParticleEngineMixin",
     "core.SmartLeavesCullingMixin",
     "core.AfkMouseActivityMixin",
-    "core.AfkKeyboardActivityMixin"${mixin_legacy}${mixin_modern}
+    "core.AfkKeyboardActivityMixin",
+    "core.MouseHandlerAccessor",
+    "core.ReflexInputMixin",
+    "core.WeatherSplashMixin",
+    "core.AbstractSoundInstanceAccessor"${mixin_legacy}${mixin_modern}
   ]
 }

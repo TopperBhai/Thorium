@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -18,6 +19,12 @@ import dev.hyperionfps.adaptive.AdaptiveDistanceController;
 import dev.hyperionfps.core.ThoriumFeatureToggles;
 
 class ThoriumConfigTest {
+
+    @AfterEach
+    void cleanup() {
+        ThoriumFeatureToggles.resetToDefaults();
+        ThoriumFeatureToggles.resetWiredForTests();
+    }
 
     @Test
     void parsesFlatStringObject() {

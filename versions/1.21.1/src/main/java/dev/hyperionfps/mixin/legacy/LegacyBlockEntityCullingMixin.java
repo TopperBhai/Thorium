@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import dev.hyperionfps.culling.AsyncOcclusionCuller;
+import dev.hyperionfps.culling.StorageCullingEngine;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
@@ -29,7 +29,7 @@ public abstract class LegacyBlockEntityCullingMixin {
             CallbackInfo ci) {
         if (this.camera != null) {
             Vec3 pos = this.camera.getPosition();
-            if (AsyncOcclusionCuller.shouldCullBlockEntity(blockEntity, pos.x, pos.y, pos.z)) {
+            if (StorageCullingEngine.shouldCullBlockEntity(blockEntity, pos.x, pos.y, pos.z)) {
                 ci.cancel();
             }
         }

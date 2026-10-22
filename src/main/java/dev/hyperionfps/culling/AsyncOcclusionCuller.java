@@ -262,6 +262,29 @@ public final class AsyncOcclusionCuller {
             return true;
         }
 
+        return isParticleOutOfView(x, y, z);
+    }
+
+    /**
+     * The view part of the particle decision: distance and occlusion.
+     *
+     * <p>Split out of {@link #shouldCullParticle(double, double, double)} so that the
+     * explosion shield can admit a <em>protected</em> particle - the explosion flash
+     * and the primary puff - even when the global creation budget is exhausted. A
+     * client that is drowning in particles has an exhausted budget, and that
+     * budget would otherwise swallow the flash and make the explosion invisible.
+     * The flash is the one particle that must never be lost.</p>
+     *
+     * @param x the particle's world X position
+     * @param y the particle's world Y position
+     * @param z the particle's world Z position
+     * @return whether the particle is out of range or hidden behind a block
+     */
+    public static boolean isParticleOutOfView(double x, double y, double z) {
+        if (!enabled) {
+            return false;
+        }
+
         // Frustum & Distance checks
         double dx = x - cameraX;
         double dy = y - cameraY;

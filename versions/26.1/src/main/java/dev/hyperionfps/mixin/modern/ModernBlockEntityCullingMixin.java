@@ -5,7 +5,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import dev.hyperionfps.culling.AsyncOcclusionCuller;
+import dev.hyperionfps.culling.StorageCullingEngine;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
 import net.minecraft.client.renderer.blockentity.state.BlockEntityRenderState;
 import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
@@ -21,7 +21,7 @@ public abstract class ModernBlockEntityCullingMixin {
     private <E extends BlockEntity, S extends BlockEntityRenderState> void hyperionfps$cullBlockEntities(
             E blockEntity, float partialTick, ModelFeatureRenderer.CrumblingOverlay crumblingOverlay,
             CallbackInfoReturnable<S> cir) {
-        if (AsyncOcclusionCuller.shouldCullBlockEntity(blockEntity)) {
+        if (StorageCullingEngine.shouldCullBlockEntity(blockEntity)) {
             cir.setReturnValue(null);
         }
     }

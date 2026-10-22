@@ -9,6 +9,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.resource.GraphicsResourceAllocator;
+import dev.hyperionfps.chunk.ElytraFlightSmoother;
+import dev.hyperionfps.chunk.PlayerVelocityPublisher;
 import dev.hyperionfps.frame.ThoriumFrameContext;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
@@ -37,10 +39,14 @@ public abstract class ModernLevelRendererFrameMixin {
     /** Publishes the camera context of the frame that is about to be rendered. */
     private static void publish(CameraRenderState cameraRenderState) {
         if (cameraRenderState == null || cameraRenderState.pos == null) {
+            ElytraFlightSmoother.clearVelocity();
             ThoriumFrameContext.beginWorldFrame(0.0, 0.0, 0.0, null, null);
             return;
         }
         Minecraft client = Minecraft.getInstance();
+        // The Elytra Flight Smoother needs the flight vector of this frame before the
+        // deferred chunk sections are released.
+        PlayerVelocityPublisher.publish();
         ThoriumFrameContext.beginWorldFrame(
                 cameraRenderState.pos.x,
                 cameraRenderState.pos.y,

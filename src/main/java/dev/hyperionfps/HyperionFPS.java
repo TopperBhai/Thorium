@@ -60,6 +60,14 @@ public final class HyperionFPS implements ClientModInitializer {
             LOGGER.warn("AFK power saver could not be installed: {}", failure.toString());
         }
 
+        // The storage culler is live from here on: the block-entity and entity
+        // culling hooks consult it for every chest, shulker box and item frame.
+        try {
+            dev.hyperionfps.culling.StorageCullingEngine.install();
+        } catch (Throwable failure) {
+            LOGGER.warn("Storage culler could not be installed: {}", failure.toString());
+        }
+
         // The Stutter Hunter needs the JVM's garbage-collection notifications to
         // tell a collection pause apart from a rendering problem.
         try {
@@ -67,6 +75,51 @@ public final class HyperionFPS implements ClientModInitializer {
             dev.hyperionfps.telemetry.ThoriumStutterHunter.install();
         } catch (Throwable failure) {
             LOGGER.warn("Stutter hunter could not be installed: {}", failure.toString());
+        }
+
+        // The mob farm optimizer is live from here on: the entity render hooks
+        // record every living entity in the cluster map and ask it whether the
+        // animation of a mob may be skipped.
+        try {
+            dev.hyperionfps.anim.MobFarmOptimizer.install();
+        } catch (Throwable failure) {
+            LOGGER.warn("Mob farm optimizer could not be installed: {}", failure.toString());
+        }
+
+        // The explosion shield is live from here on: the particle creation hook
+        // consults it for every explosion, firework and smoke particle.
+        try {
+            dev.hyperionfps.particle.ExplosionShield.install();
+        } catch (Throwable failure) {
+            LOGGER.warn("Explosion shield could not be installed: {}", failure.toString());
+        }
+
+        // The chunk upload pacer is live from here on: the chunk hooks consult it for
+        // every section that is built, and the Elytra Flight Smoother inside it
+        // prioritises the sections the player is flying towards.
+        try {
+            dev.hyperionfps.chunk.ThoriumChunkUploadPacer.install();
+        } catch (Throwable failure) {
+            LOGGER.warn("Chunk upload pacer could not be installed: {}", failure.toString());
+        }
+
+        // The late input sampler is live from here on: the mouse hook drains the
+        // platform event queue at the tail of the frame, so the movement the player
+        // made while the frame was working is applied to the frame they are looking
+        // at instead of the next one.
+        try {
+            dev.hyperionfps.input.ThoriumReflexController.install();
+        } catch (Throwable failure) {
+            LOGGER.warn("Late input sampler could not be installed: {}", failure.toString());
+        }
+
+        // The No-Lag Weather and the Clean Water / Fast Fog optimiser are live from
+        // here on: the weather hooks consult it for every precipitation pass and the
+        // particle hook for every splash particle.
+        try {
+            dev.hyperionfps.render.WeatherFogOptimizer.install();
+        } catch (Throwable failure) {
+            LOGGER.warn("Weather and fog optimiser could not be installed: {}", failure.toString());
         }
 
         // Probe the mods that Thorium has to coexist with (shader packs, competing

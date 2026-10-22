@@ -44,6 +44,7 @@ public final class ThoriumFrametimeTracker {
 
         // Ignore abnormal pauses (such as window minimization or loading screen)
         if (deltaNanos <= 0 || deltaNanos > 500_000_000L) {
+            lastFrameWasStutter = false;
             return;
         }
 

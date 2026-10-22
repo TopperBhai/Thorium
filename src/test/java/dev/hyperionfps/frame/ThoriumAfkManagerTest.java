@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.lang.reflect.Field;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -90,18 +92,25 @@ class ThoriumAfkManagerTest {
     }
 
     @Test
-    void theIdleClockIsReportedInMilliseconds() {
-        ThoriumAfkManager.onActivity();
-        ThoriumAfkManager.update(System.nanoTime(), true);
-        long first = ThoriumAfkManager.getIdleMillis();
-        assertTrue(first < 100L, "a fresh activity must reset the idle clock, was " + first);
+    void theIdleClockIsReportedInMilliseconds() throws Exception {
+        long base = 1_000_000_000L;
+        setLastActivityNanos(base);
 
-        ThoriumAfkManager.update(System.nanoTime() + 12_000_000L, true);
+        ThoriumAfkManager.update(base, true);
+        long first = ThoriumAfkManager.getIdleMillis();
+        assertEquals(0L, first, "a fresh activity must reset the idle clock");
+
+        ThoriumAfkManager.update(base + 12_000_000L, true);
         long second = ThoriumAfkManager.getIdleMillis();
 
-        long delta = second - first;
-        assertTrue(delta >= 11L && delta <= 13L,
-                "twelve milliseconds of silence must show up as twelve idle milliseconds, was " + delta);
+        assertEquals(12L, second - first,
+                "twelve milliseconds of silence must show up as exactly twelve idle milliseconds");
+    }
+
+    private static void setLastActivityNanos(long nanos) throws Exception {
+        Field field = ThoriumAfkManager.class.getDeclaredField("lastActivityNanos");
+        field.setAccessible(true);
+        field.setLong(null, nanos);
     }
 
     @Test

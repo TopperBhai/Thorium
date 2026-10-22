@@ -168,8 +168,8 @@ public final class ThoriumSettingRows {
                         "🔋 Idle Detection"),
 
                 featureRow(Feature.REFLEX,
-                        "Samples the mouse and the keyboard at the very end of the frame, right before the camera matrix is built, so your input is applied to the frame you are looking at.",
-                        "⚡ 8-14ms Lower Input Lag"),
+                        "Drains the mouse and the keyboard again at the very end of the frame, right before the camera matrix is built. Movement you made while the frame was working is applied to the frame you are looking at, not to the next one.",
+                        "⚡ Same-Frame Input"),
 
                 featureRow(Feature.STUTTER_ALERT,
                         "The Nuclear Stutter Hunter breaks every freeze down into its dominant phase - garbage collection, mob animation, chunk upload - and tells you which one caused it.",
@@ -226,10 +226,13 @@ public final class ThoriumSettingRows {
     /**
      * The rows of the Performance tab.
      *
-     * @param chunkUploadPacerSupported whether this Minecraft version has a Thorium
-     *                                  hook in the chunk upload path
+     * @param gpuUploadBudget whether this Minecraft version can split the chunk mesh
+     *                        <em>upload</em> itself into a per-frame budget. The 26.x
+     *                        pipeline copies every mesh into shared GPU buffers in
+     *                        one go, so there the pacer budgets the section
+     *                        <em>builds</em> instead. Both are real, both are wired.
      */
-    public static List<Spec> performanceRows(boolean chunkUploadPacerSupported) {
+    public static List<Spec> performanceRows(boolean gpuUploadBudget) {
         List<Spec> rows = new ArrayList<>();
 
         rows.add(new Spec("Entity Animation LOD",
@@ -241,7 +244,7 @@ public final class ThoriumSettingRows {
                 "★ 60-80% Entity CPU Gain"));
 
         rows.add(featureRow(Feature.MOB_FARM,
-                "Detects dense mob clusters and throttles the secondary limb animation of the mobs you are not looking at, keeping the server tick and the render thread free.",
+                "Detects a dense mob cluster and recomputes the animation of the mobs you are not looking at only one frame out of three, so a pen of thirty zombies costs a third of the bone work.",
                 "★ Mob Farm CPU Relief"));
 
         rows.add(new Spec("Dual-Stage BVH Occlusion",
@@ -257,7 +260,7 @@ public final class ThoriumSettingRows {
                 "★ Storage Room Relief"));
 
         rows.add(featureRow(Feature.ELYTRA_SMOOTHER,
-                "While you are flying fast, chunk meshes are uploaded in the direction you are travelling first, so the world keeps up with you instead of stalling behind.",
+                "While you are flying fast, the chunk sections behind your flight vector are held back and the ones in front of you are built first, so the world keeps up with you instead of stalling behind. A section that has waited for half a second is always released.",
                 "⚡ No Elytra Hitching"));
 
         rows.add(featureRow(Feature.EXPLOSION_SHIELD,
@@ -289,21 +292,21 @@ public final class ThoriumSettingRows {
                 "Throttles PCIe transfer rate of fluid, fire, and portal animations to save VRAM transfer bandwidth when not directly viewed.",
                 "⚡ VRAM Bandwidth Saver"));
 
-        if (chunkUploadPacerSupported) {
+        if (gpuUploadBudget) {
             rows.add(new Spec("Chunk Upload Pacer",
                     () -> ThoriumChunkUploadPacer.isEnabled() ? "2.5ms Cap" : "OFF",
                     ControlType.CYCLE,
                     ThoriumChunkUploadPacer::isEnabled,
                     status -> ThoriumChunkUploadPacer.setEnabled(!ThoriumChunkUploadPacer.isEnabled()),
-                    "Budgets chunk mesh VBO uploads per frame to prevent large spikes and freeze frames when crossing chunk boundaries.",
+                    "Budgets chunk mesh VBO uploads per frame (2.5 ms, at most 8 sections) so crossing a chunk border never freezes the frame. While you are flying fast it also builds the sections you are flying towards first.",
                     "⚡ Zero Chunk Hitching"));
         } else {
             rows.add(new Spec("Chunk Upload Pacer",
-                    () -> "NOT AVAILABLE ON 26.x",
-                    ControlType.ACTION,
-                    () -> false,
-                    status -> status.accept("NOT AVAILABLE"),
-                    "Not available on the 26.x render pipeline: the modern chunk upload path has no Thorium hook.",
+                    () -> ThoriumChunkUploadPacer.isEnabled() ? "Flight Order" : "OFF",
+                    ControlType.CYCLE,
+                    ThoriumChunkUploadPacer::isEnabled,
+                    status -> ThoriumChunkUploadPacer.setEnabled(!ThoriumChunkUploadPacer.isEnabled()),
+                    "The 26.x pipeline copies every chunk mesh into shared GPU buffers in one go, so the upload itself cannot be split. Thorium therefore budgets the section builds instead: the sections you are flying towards are built first, the ones behind you wait their turn.",
                     "⚡ Zero Chunk Hitching"));
         }
 
@@ -365,18 +368,18 @@ public final class ThoriumSettingRows {
                 new Spec("Weather Rendering",
                         () -> ThoriumFeatureToggles.getWeatherMode().name(),
                         ControlType.CYCLE,
-                        () -> ThoriumFeatureToggles.getWeatherMode() != ThoriumFeatureToggles.WeatherMode.VANILLA,
+                        () -> true,
                         status -> {
                             ThoriumFeatureToggles.WeatherMode next =
                                     ThoriumFeatureToggles.getWeatherMode().next();
                             ThoriumFeatureToggles.setWeatherMode(next);
                             status.accept(next.name());
                         },
-                        "MINIMAL draws one cheap rain pass and drops the ground splash particles. OFF removes the rain from your screen; the weather in the world and on the server stays exactly as it is.",
+                        "MINIMAL keeps the rain but drops the thousands of ground splash particles that a downpour spawns - that flood is what costs the frames. OFF removes the rain from your screen; the weather in the world and on the server stays exactly as it is, and so does the rain sound.",
                         "🌧 No-Lag Weather"),
 
                 featureRow(Feature.CLEAN_WATER_FOG,
-                        "Clamps the underwater fog to a short, crisp distance and simplifies the distance fog curve, which removes a lot of fragment shader work in oceans and rain.",
+                        "Clamps the underwater fog to a short, crisp distance and narrows the distance fog band, so the water reads clean and the horizon resolves sharply. This one is visual only: the fog shader does the same work either way.",
                         "🌊 Crisp Water, Less Fill Rate"),
 
                 new Spec("Safe Mode (Disable Thorium)",

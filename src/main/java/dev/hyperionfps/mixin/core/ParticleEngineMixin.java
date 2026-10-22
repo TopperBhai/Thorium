@@ -5,7 +5,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import dev.hyperionfps.culling.AsyncOcclusionCuller;
+import dev.hyperionfps.particle.ExplosionParticleFilter;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.client.particle.ParticleEngine;
 import net.minecraft.core.particles.ParticleOptions;
@@ -20,6 +20,10 @@ import net.minecraft.core.particles.ParticleOptions;
  * alone: it maintains the per-limit particle counters that decide whether new particles
  * may be created at all, and re-implementing it would break that bookkeeping (see
  * {@code ThoriumParticleBudget} for the full story).</p>
+ *
+ * <p>The decision itself belongs to {@link ExplosionParticleFilter}: it applies the
+ * explosion shield and then falls back to the generic particle culling, so this
+ * hook stays a one-line adapter on every version.</p>
  */
 @Mixin(ParticleEngine.class)
 public abstract class ParticleEngineMixin {
@@ -29,7 +33,7 @@ public abstract class ParticleEngineMixin {
             ParticleOptions options, double x, double y, double z,
             double xSpeed, double ySpeed, double zSpeed,
             CallbackInfoReturnable<Particle> cir) {
-        if (AsyncOcclusionCuller.shouldCullParticle(x, y, z)) {
+        if (ExplosionParticleFilter.shouldCullParticle(options, x, y, z)) {
             cir.setReturnValue(null);
         }
     }

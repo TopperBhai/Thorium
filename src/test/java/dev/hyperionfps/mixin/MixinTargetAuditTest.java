@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
+import org.objectweb.asm.FieldVisitor;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
@@ -81,6 +82,12 @@ class MixinTargetAuditTest {
     private static final Pattern QUOTED_PATTERN = Pattern.compile("\"([^\"]+)\"");
 
     private static final String MIXIN_ANNOTATION = "Lorg/spongepowered/asm/mixin/Mixin;";
+
+    /**
+     * The accessor annotation whose {@code value} element names a Minecraft
+     * <em>field</em> instead of a method.
+     */
+    private static final String ACCESSOR_ANNOTATION = "Lorg/spongepowered/asm/mixin/gen/Accessor;";
 
     /**
      * The injector annotations whose {@code method} / {@code value} element names a
@@ -193,13 +200,14 @@ class MixinTargetAuditTest {
 
         List<String> targets = new ArrayList<>();
         List<String> selectors = new ArrayList<>();
-        readMixinMetadata(bytes, targets, selectors);
+        List<String> fieldSelectors = new ArrayList<>();
+        readMixinMetadata(bytes, targets, selectors, fieldSelectors);
 
         if (targets.isEmpty()) {
             problems.add(mixinClassName + " has no readable @Mixin target");
             return problems;
         }
-        if (selectors.isEmpty()) {
+        if (selectors.isEmpty() && fieldSelectors.isEmpty()) {
             problems.add(mixinClassName + " declares no injection target method");
             return problems;
         }
@@ -217,12 +225,30 @@ class MixinTargetAuditTest {
                             + " does not exist on this Minecraft version");
                 }
             }
+            if (!fieldSelectors.isEmpty()) {
+                Set<String> fields = collectFields(minecraft, target);
+                if (fields == null) {
+                    problems.add(mixinClassName + " accesses fields of " + target
+                            + ", which does not exist on this Minecraft version");
+                    continue;
+                }
+                for (String field : fieldSelectors) {
+                    if (!fields.contains(field)) {
+                        problems.add(mixinClassName + " -> " + target + "#" + field
+                                + " does not exist on this Minecraft version");
+                    }
+                }
+            }
         }
         return problems;
     }
 
-    /** Extracts the {@code @Mixin} target classes and the injection method selectors. */
-    private static void readMixinMetadata(byte[] bytes, List<String> targets, List<String> selectors) {
+    /**
+     * Extracts the {@code @Mixin} target classes, the injection method selectors and
+     * the accessor field selectors.
+     */
+    private static void readMixinMetadata(byte[] bytes, List<String> targets, List<String> selectors,
+                                          List<String> fieldSelectors) {
         new ClassReader(bytes).accept(new ClassVisitor(Opcodes.ASM9) {
             @Override
             public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
@@ -263,6 +289,18 @@ class MixinTargetAuditTest {
                 return new MethodVisitor(Opcodes.ASM9) {
                     @Override
                     public AnnotationVisitor visitAnnotation(String annotationDescriptor, boolean visible) {
+                        if (ACCESSOR_ANNOTATION.equals(annotationDescriptor)) {
+                            // An accessor names a field, not a method. Without an
+                            // explicit name Mixin derives it from the method name.
+                            return new AnnotationVisitor(Opcodes.ASM9) {
+                                @Override
+                                public void visit(String ignored, Object value) {
+                                    if (value instanceof String field) {
+                                        fieldSelectors.add(field);
+                                    }
+                                }
+                            };
+                        }
                         if (!INJECTOR_ANNOTATIONS.contains(annotationDescriptor)) {
                             return null;
                         }
@@ -322,6 +360,45 @@ class MixinTargetAuditTest {
             current = superName[0];
         }
         return methods;
+    }
+
+    /**
+     * Collects every field of a class and its superclasses.
+     *
+     * <p>The counterpart of {@link #collectMethods} for the accessors, which name a
+     * field instead of a method. A renamed field would break the accessor just as
+     * silently as a renamed method breaks an injection, so it is audited the same
+     * way.</p>
+     *
+     * @return the field names, or {@code null} when the class itself is absent
+     */
+    private static Set<String> collectFields(ClassLoader loader, String internalName) throws IOException {
+        Set<String> fields = new LinkedHashSet<>();
+        String current = internalName;
+        int guard = 0;
+        while (current != null && guard++ < 32) {
+            byte[] bytes = readClassBytes(loader, current + ".class");
+            if (bytes == null) {
+                return fields.isEmpty() ? null : fields;
+            }
+            String[] superName = new String[1];
+            new ClassReader(bytes).accept(new ClassVisitor(Opcodes.ASM9) {
+                @Override
+                public void visit(int version, int access, String name, String signature,
+                                  String superType, String[] interfaces) {
+                    superName[0] = superType;
+                }
+
+                @Override
+                public FieldVisitor visitField(int access, String name, String descriptor,
+                                               String signature, Object value) {
+                    fields.add(name);
+                    return null;
+                }
+            }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+            current = superName[0];
+        }
+        return fields;
     }
 
     /**

@@ -32,7 +32,7 @@ Thorium provides three pre-configured hardware profiles built directly into the 
 | :--- | :--- | :--- |
 | 🥔 **Potato** | Integrated GPUs & Low-Spec Laptops | Aggressive culling, throttled distant entity animations, maximum frame throughput squeeze. |
 | ⚡ **Balanced** *(Default)* | Everyday Gaming Desktops & Laptops | Optimal balance of silky-smooth 1% low frametimes, native memory compaction, and full vanilla visual fidelity. |
-| ☢️ **Nuclear Max** | Dedicated GPUs & High-Refresh Displays (144Hz+) | Uncapped frame execution pipeline, predictive thread pacer, sub-millisecond input queueing, and extreme micro-stutter suppression. |
+| ☢️ **Nuclear Max** | Dedicated GPUs & High-Refresh Displays (144Hz+) | Uncapped frame execution pipeline, predictive thread pacer, same-frame input sampling, and extreme micro-stutter suppression. |
 
 ---
 
@@ -44,14 +44,16 @@ Track your gameplay fluidity in real time with an ultra-clean, frosted-glass tel
 * **Smoothness Score %:** Live stability rating calculating exact frame delivery consistency.
 * **Telemetry Data:** Current FPS, Frametime (ms), Average ms, Max Spike ms, Detected Hitch Count, and Active RAM Usage.
 
-### 2. 🛡️ Budgeted Chunk Upload Pacer
+### 2. 🛡️ Budgeted Chunk Upload Pacer & Elytra Flight Smoother
 * Eliminates the infamous "chunk loading hitch" when flying with Elytra or teleporting.
 * Spreads heavy chunk mesh uploads across consecutive frames within strict microsecond time budgets rather than freezing the render thread.
-* **Minecraft 1.21.1 and 1.21.11** — the 26.x render pipeline has a different upload path and is not hooked yet. The console shows the switch as *not available* on those versions instead of pretending.
+* **Elytra Flight Smoother** — while you are flying faster than 15 m/s, the chunk sections *behind* your flight vector are postponed and the ones inside a 45° forward cone are built first, so the world keeps up with you instead of stalling behind. A section that has waited for half a second is always released, so the deferral can never become a hole in the world.
+* **Minecraft 1.21.1 and 1.21.11** — the 26.x pipeline copies every chunk mesh into shared GPU buffers in one go, so the upload itself cannot be split. On 26.x Thorium budgets the section *builds* instead, which is what fills that upload queue. The console says exactly which one it is doing.
 
 ### 3. 👁️ Asynchronous Frustum & Occlusion Culling
 * Hierarchical Bounding Volume (BVH) grid and frustum test discards non-visible chunk sections and hidden block entities (chests, hoppers, banners) before they ever reach the GPU pipeline.
 * Massive FPS gains in mega-bases, storage rooms, and trading halls.
+* **Storage & Item Frame Culling** — chests, trapped chests, ender chests, shulker boxes and item frames get their own visibility rules: a container sealed in opaque blocks on all six sides is invisible from every angle and is skipped, a container past 32 blocks is skipped when it is also outside your direct focal cone, and an item frame past 24 blocks is skipped outright. The container you currently have open is never skipped, and neither is the other half of a double chest.
 * The camera context is published **once per rendered frame** on every supported version, so the distance governor behaves the same everywhere.
 
 ### 4. 🧹 Proactive Idle Janitor & Zero-Allocation Memory Pools
@@ -61,17 +63,40 @@ Track your gameplay fluidity in real time with an ultra-clean, frosted-glass tel
 ### 5. 🏃 Dynamic Entity & Animation LOD
 * Intelligently throttles tick rates and skeletal animation updates for distant entities that are far away from your crosshair.
 * Keeps 100% full animation quality for nearby mobs and players while dramatically reducing CPU overhead during mob-heavy scenes.
+* **Mob Farm Optimizer** — a 5×5 block cell holding more than 15 living mobs of the *same* species is a farm, and the animation of a mob in it is recomputed on one frame out of three (the two skipped frames do no bone and no limb-swing work at all). A mob within 4 blocks of the camera keeps its full animation, and your local player, named mobs, leashed mobs and passengers are exempt. A farm also gets its own acoustic policy: after 6 sound events in 50 ms the surplus plays at half the volume, and everything beyond twice that is dropped.
 
 ### 6. 🎨 Modern Frosted-Glass Video Settings GUI (`F8`)
 * Clean Sodium-style layout with **100% interactive controls** — a switch that cannot change anything is shown as *not wired* / *not available* instead of pretending to work.
 * Real-time preview card explaining what each toggle does and its hardware performance impact.
 * Translucent dark acrylic backdrop keeping the live 3D game world visible behind menus.
 
-### 7. 🧭 Honest Compatibility
+### 7. 🌧️ No-Lag Weather & Clean Water / Fast Fog
+* **Three weather modes** (*Settings → Advanced → Weather Rendering*): `VANILLA` changes nothing, `MINIMAL` keeps the rain but drops the thousands of ground splash particles a downpour spawns, and `OFF` removes the rain from your screen entirely. The weather in the world, on the server and the rain sound are never touched — only what is drawn on your client.
+* **Clean Water & Fast Fog** (*Settings → Advanced → Clean Water & Fast Fog*): the underwater fog is clamped to a short, crisp distance and the distance fog band is narrowed, so the water reads clean and the horizon resolves sharply. This one is **visual** — the fog shader does the same work either way, so no frame-time claim is made for it.
+
+### 8. 💥 Explosion & Firework Shield
+* A TNT chain, a wither spawn or a firework show can no longer drown the client in particles.
+* Two continuously refilled rate limits do the work: at most 250 tracked particles per second across the whole world, and at most 48 per second per one-block cell — which is what removes the quads that are drawn on top of each other.
+* **The explosion flash always survives.** The first particle of every burst bypasses the rate limit *and* the global particle budget, so the feedback a player needs is never the thing that gets dropped.
+
+### 9. ⚡ Ultra Low-Latency Reflex
+* Minecraft drains the platform event queue once per frame and applies the collected cursor movement afterwards, so everything you do *while* the frame is working reaches the camera one frame late.
+* Thorium drains the queue a **second** time, at the last moment at which the result is still useful — immediately before the game builds the camera matrix — so the movement is applied to the frame you are looking at.
+* The queue is *drained*, never copied: every event is still delivered **exactly once**, only earlier. The tick is never touched, so the movement packets the client sends are exactly the ones vanilla would have sent.
+
+### 10. 🔋 AFK Battery & Power Saver (Stealth AFK™)
+* When the window loses focus — or you stop touching the mouse for a while — the client throttles itself to 10 FPS and parks the render thread instead of burning battery.
+* The park is spent in 16 ms slices, so a mouse move, a click or a key press wakes it **immediately** instead of after the whole park.
+
+### 11. 🎯 Instant Lag Spike Alert (Nuclear Stutter Hunter™)
+* Every frame is broken down into its five phases, and JVM garbage-collection pauses are correlated with the stutter window.
+* When a freeze happens, a toast names the dominant cause: `Spike: 58ms [GC: 34ms | Mobs: 18ms | Chunk: 6ms]`.
+
+### 12. 🧭 Honest Compatibility
 * Detects a competing renderer (Sodium, Embeddium, Rubidium, Magnesium, Lithium, Oclite) and **stands down** the overlapping culling subsystems so the two never fight over visibility. Can be turned off in *Advanced → Auto-Yield to Sodium*.
 * Detects a shader pack (Iris, Oculus, OptiFine) and **disables** the fast-math overrides, because shader packs depend on the exact precision of vanilla's maths.
 
-### 8. 💬 Community
+### 13. 💬 Community
 * A single, dismissible invite card appears on the main menu the **first** time you launch the game — and never again. The link stays available forever in *Settings → General → Community Discord*, and the prompt can be switched off entirely there.
 
 ---
@@ -82,11 +107,20 @@ Track your gameplay fluidity in real time with an ultra-clean, frosted-glass tel
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | Entity / block-entity / particle culling | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Frustum + occlusion culling | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Storage & item frame culling | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Dynamic distance governor | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Zero-jitter frame pacer + target FPS cap | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Adaptive render distance | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Chunk upload pacer | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
+| Adaptive render distance (opt-in) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Chunk upload pacer (GPU upload budget) | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
+| Elytra flight smoother (flight-vector section order) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Mob farm optimizer (swarm animation + acoustic dampening) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Explosion & firework shield | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Ultra low-latency reflex (same-frame input) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| AFK battery & power saver | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Instant lag spike alert (stutter attribution) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Extreme-mode fog suppression | ✅ | ✅ | ✅ | ✅ | ✅ |
+| No-Lag Weather (rain modes + splash suppression) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Clean Water & Fast Fog (underwater fog + fog band) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Particle budget | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Fast-math overrides (opt-in) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | GPU entity instancing | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
@@ -136,7 +170,7 @@ To measure Thorium on your own hardware:
 | **Average FPS** | *measure it* | *measure it* |
 | **1 % Low Frametime** | *measure it* | *measure it* |
 | **0.1 % Low Frametime** | *measure it* | *measure it* |
-| **Elytra Chunk Hitching** | Frequent freezes | Budgeted on 1.21.x |
+| **Elytra Chunk Hitching** | Frequent freezes | Budgeted on every version |
 | **Allocation rate** | *measure it* | *measure it* |
 
 > An in-game capture harness that writes frametime percentiles and the allocation

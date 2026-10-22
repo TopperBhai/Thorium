@@ -31,6 +31,7 @@ public final class ThoriumParticleBudget {
     private static volatile boolean enabled = true;
     private static final AtomicInteger ADMITTED = new AtomicInteger();
     private static final AtomicLong REJECTED = new AtomicLong();
+    private static final AtomicLong PRIORITY_ADMITTED = new AtomicLong();
 
     private ThoriumParticleBudget() {
     }
@@ -54,6 +55,31 @@ public final class ThoriumParticleBudget {
         return true;
     }
 
+    /**
+     * Admits a particle that must never be dropped.
+     *
+     * <p>The explosion shield uses this for the explosion flash and the primary
+     * puff. The whole point of the shield is that the visual feedback of an
+     * explosion survives even when the client is drowning in particles - and a
+     * client that is drowning in particles has an exhausted creation budget, which
+     * would otherwise swallow the flash and make the explosion invisible.</p>
+     *
+     * <p>A priority admission bypasses the window limit entirely. It is counted
+     * separately, so the report can show how many particles were let through
+     * outside the budget.</p>
+     *
+     * @return always {@code true} - a priority particle is never rejected
+     */
+    public static boolean admitPriority() {
+        PRIORITY_ADMITTED.incrementAndGet();
+        return true;
+    }
+
+    /** Particles admitted outside the budget window through the priority path. */
+    public static long getPriorityAdmitted() {
+        return PRIORITY_ADMITTED.get();
+    }
+
     /** Starts a new budget window. Called by the culler daemon every 50 ms. */
     public static void resetWindow() {
         ADMITTED.set(0);
@@ -69,7 +95,6 @@ public final class ThoriumParticleBudget {
             ADMITTED.set(0);
         }
     }
-
     /** Particles admitted inside the current window. */
     public static int getAdmitted() {
         return ADMITTED.get();

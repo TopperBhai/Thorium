@@ -82,6 +82,7 @@ Format: `REQ-<AREA>-<n>` · **Must** = required for v0.2 · **Should** = desirab
 | REQ-CULL-6 | Maintain a **dynamic distance scale** that shrinks when frame time exceeds 20 ms and grows when it falls below 14 ms, clamped to [0.35, 1.0]. | Must |
 | REQ-CULL-7 | Never cull the camera's own chunk section. | Must |
 | REQ-CULL-8 | Memoize block-entity occlusion results in a bounded cache with an explicit eviction path. | Must |
+| REQ-CULL-9 | Apply storage-specific culling to chest-type block entities (`ChestBlockEntity`, `TrappedChestBlockEntity`, `EnderChestBlockEntity`, `ShulkerBoxBlockEntity`) and item frames (`ItemFrame`, `GlowItemFrame`): a container whose six face neighbours are all opaque full blocks that carry no block entity is invisible from every angle and is skipped; a container beyond the storage distance is skipped only when it is also outside the player's direct focal cone; an item frame beyond the item-frame distance is skipped outright. The container the player currently has open is never skipped. | Must |
 
 ### 2.3 Memory & GC
 
@@ -180,15 +181,15 @@ Format: `REQ-<AREA>-<n>` · **Must** = required for v0.2 · **Should** = desirab
 
 | ID | Requirement | Priority |
 | :--- | :--- | :--- |
-| REQ-HEAD-1 | **Mob Farm Optimizer** (`anim.mob_farm.enabled`): Detect dense mob clusters (>15 entities in 5x5 block area) and decouple/throttle secondary animation bone ticks and limb swings for non-targeted, unnamed mobs. | Must |
+| REQ-HEAD-1 | **Mob Farm Optimizer** (`anim.mob_farm.enabled`): Detect dense mob clusters (>15 entities in 5x5 block area) and decouple/throttle secondary animation bone ticks and limb swings for non-targeted, unnamed mobs. The animation of a clustered mob must be recomputed on **one frame out of three** (the two skipped frames perform no bone or limb-swing work at all), and a mob within **4 blocks** of the camera must never be throttled. The local player, a named mob, a leashed mob and a passenger are exempt: an exempt mob is not counted towards the cluster and protects its whole cell. A cell of a mob farm must also dampen its own ambience: after **6 sound events in 50 ms** the surplus is played at **50 % volume**, and everything beyond twice that is dropped. | Must |
 | REQ-HEAD-2 | **Storage Room & Item Frame Culling** (`culling.storage_item_frames.enabled`): Aggressively cull chest-type block entities (`ChestBlockEntity`, `TrappedChestBlockEntity`, `EnderChestBlockEntity`, `ShulkerBoxBlockEntity`) and item frames when enclosed by opaque blocks or at distance, exempting open containers. | Must |
-| REQ-HEAD-3 | **Elytra Flight Smoother** (`chunk.elytra_smoother.enabled`): Prioritize chunk mesh uploads within a 45° forward cone along the player velocity vector $\vec{v}$ when speed exceeds 15 m/s, bringing upload pacing parity to 26.x Blaze3D pipelines. | Must |
+| REQ-HEAD-3 | **Elytra Flight Smoother** (`chunk.elytra_smoother.enabled`): Prioritize chunk mesh uploads within a 45° forward cone along the player velocity vector $\vec{v}$ when speed exceeds 15 m/s, bringing upload pacing parity to 26.x Blaze3D pipelines. A section behind the flight vector is **deferred**, not dropped: the sections inside the forward cone are built first, the neutral ones next, the ones behind the player last. Three guards keep the deferral from ever becoming a visible hole — a section closer than **16 blocks** is never deferred, a section that has waited for more than **500 ms** is released regardless of its priority, and a section that can no longer be scheduled is dropped instead of crashing the frame. | Must |
 | REQ-HEAD-4 | **AFK Battery & Power Saver (Stealth AFK™)** (`frame.afk_eco.enabled`): Detect window focus loss or 60 s input inactivity, clamping render rate to 10 FPS and parking via `LockSupport.parkNanos` (cutting CPU/GPU power up to 75%), waking instantly (0 ms) on mouse/key activity. The park budget must be spent in slices, so an input event is noticed within one slice rather than after the whole park, and the frametime measurement must be suspended while the throttle runs — an intentional throttle is not a stutter. | Must |
-| REQ-HEAD-5 | **Instant Lag Spike Alert (Nuclear Stutter Hunter™)** (`telemetry.stutter_alert.enabled`): Track 5-phase frame execution breakdown and correlate JVM `GarbageCollectorMXBean` pause events, displaying an instant HUD toast attributing freezes (e.g. `Spike: 58ms [GC: 34ms | Mobs: 18ms | Chunk: 6ms]`). | Must |
-| REQ-HEAD-6 | **Explosion & Firework Shield** (`particle.explosion_shield.enabled`): Cap high-density particle floods from TNT explosions, Wither spawns, and fireworks when burst rates exceed 250 particles/sec, preventing frame freezes while preserving telegraph cues. | Must |
-| REQ-HEAD-7 | **Ultra Low-Latency Reflex** (`input.reflex.enabled`): Late-poll mouse and keyboard events at the tail of the frame boundary wait immediately before camera/matrix calculation, cutting input-to-photon latency by 8–14 ms. | Must |
-| REQ-HEAD-8 | **No-Lag Weather & Rain** (`render.weather.mode`): Support `VANILLA`, `MINIMAL` (lightweight single-pass precipitation; suppress ground splash particle spam), and `OFF` (clean weather without affecting server precipitation state). | Must |
-| REQ-HEAD-9 | **Clean Water & Fast Fog** (`render.clean_water_fog.enabled`): Clamp underwater fog distances and simplify volumetric fog curves for crisp visibility and reduced GPU fragment fill-rate overhead. | Must |
+| REQ-HEAD-5 | **Instant Lag Spike Alert (Nuclear Stutter Hunter™)** (`telemetry.stutter_alert.enabled`): Track 5-phase frame execution breakdown and correlate JVM `GarbageCollectorMXBean` pause events, displaying an instant HUD toast attributing freezes (e.g. `Spike: 58ms [GC: 34ms \| Mobs: 18ms \| Chunk: 6ms]`). | Must |
+| REQ-HEAD-6 | **Explosion & Firework Shield** (`particle.explosion_shield.enabled`): Cap high-density particle floods from TNT explosions, Wither spawns, and fireworks when burst rates exceed 250 particles/sec, preventing frame freezes while preserving telegraph cues. The shield watches exactly five categories (`EXPLOSION`, `EXPLOSION_EMITTER`, `FIREWORK`, `CAMPFIRE_SMOKE`, `LARGE_SMOKE`); every other particle is untouched. A continuously refilled token bucket admits at most **250 particles/sec** across them, and a per-one-block-cell bucket admits at most **48 particles/sec** per cell, which removes the quads that are drawn on top of each other. The **first particle of every category inside a burst is protected**: it bypasses the rate limit, the per-cell limit *and* the global creation budget, so the explosion flash and the primary puff always survive. A cell that has been quiet for 250 ms starts a new burst. | Must |
+| REQ-HEAD-7 | **Ultra Low-Latency Reflex** (`input.reflex.enabled`): Drain the mouse and keyboard event queue a second time at the tail of the frame - immediately before the game applies the pending cursor movement, which is where the camera matrix is built - so that movement which arrived while the frame was working is applied to the frame the player is looking at instead of the next one. The implementation must **not** touch the tick logic (the movement packets the client sends stay exactly the ones vanilla would send), must **not** re-implement the input pipeline (the game's own routine drains the queue, so every event is still delivered exactly once), and must **measure** what it recovered instead of advertising a fixed latency figure. | Must |
+| REQ-HEAD-8 | **No-Lag Weather & Rain** (`render.weather.mode`): Support `VANILLA`, `MINIMAL` and `OFF`. `VANILLA` touches nothing. `MINIMAL` keeps the rain sheets exactly as vanilla draws them but drops the **ground splash particles** - the flood a downpour spawns (`0.225 × (2r+1)² × rainLevel²` per tick) is what costs the frames, and the player cannot tell one splash from the next. `OFF` removes the precipitation layer from the client's screen **without affecting the server precipitation state** and **without affecting the rain sound**. The splash must be dropped at the particle call and never at the method that spawns it, because on every supported version the same method plays the rain sound. | Must |
+| REQ-HEAD-9 | **Clean Water & Fast Fog** (`render.clean_water_fog.enabled`): Clamp the underwater fog to a short, crisp distance (the end at most 48 blocks, the start no longer behind the camera) and narrow the distance fog band to at most 24 blocks, so the water reads as a clean, even tint and the horizon resolves sharply. The band is never widened, so at the default render distance nothing changes. This requirement is **visual**: the fog shader does the same fragment work whether the band is 24 or 64 blocks wide, so no fill-rate claim may be made for it - the measurable work reduction of this step comes from the weather side (REQ-HEAD-8). | Must |
 | REQ-HEAD-10 | **Purge RAM Now** (`ThoriumMemoryOptimizer.purgeMemoryNow()`): Expose an interactive action button in the settings console that flushes culling caches, clears direct buffer pools, and sweeps heap/off-heap memory, displaying reclaimed megabytes. The number shown must be the **measured** amount - a fabricated minimum is a lie. | Must |
 
 ---
@@ -224,18 +225,19 @@ code. Mixins call *into* policy engines; policy engines never call mixins.
 | :--- | :--- | :--- |
 | `core` | `RenderThreads`, `ThreadGovernor`, `TelemetryGate`, `ThoriumSafety`, `ThoriumCompatibility`, `ThoriumSubsystemReport`, `ThoriumFeatureToggles` | Client-thread capture, priority elevation, telemetry kill-switch, mod-compatibility probe, subsystem status report, headline feature switches |
 | `frame` | `ThoriumFrametimeTracker`, `ThoriumFramePacer`, `FramePacing`, `ThoriumFrameContext`, `ThoriumAfkManager` | Frametime history, sleep→spin pacing, boot-window VSync policy, authoritative per-frame context, AFK power saver |
-| `culling` | `AsyncOcclusionCuller`, `SectionCullingEngine`, `OcclusionGrid`, `OcclusionRaycaster`, `ThoriumBvhCuller`, `FrustumCache` | Visibility decisions for sections, entities, block entities, particles |
+| `culling` | `AsyncOcclusionCuller`, `StorageCullingEngine`, `SectionCullingEngine`, `OcclusionGrid`, `OcclusionRaycaster`, `ThoriumBvhCuller`, `FrustumCache` | Visibility decisions for sections, entities, block entities, particles, and the storage-room specific chest / item-frame rules |
 | `memory` | `DirectBufferPool`, `OffHeap`, `IdleJanitor`, `ThoriumMemoryOptimizer`, `pool/*` | Zero-allocation pools, native memory return, idle sweeping, heap defence |
-| `chunk` | `ThoriumChunkUploadPacer` | Dual-budget chunk mesh upload scheduling |
-| `anim` | `ThoriumEntityLodThrottler` | Distance-based animation LOD |
+| `chunk` | `ThoriumChunkUploadPacer`, `ElytraFlightSmoother`, `PlayerVelocityPublisher` | Dual-budget chunk mesh upload scheduling, the flight-vector section order, and the single adapter that reads the player entity |
+| `anim` | `MobFarmOptimizer`, `ThoriumEntityLodThrottler` | Mob-farm cluster animation throttling + acoustic dampening, distance-based animation LOD |
 | `audio` | `ThoriumSoundGovernor` | Spatial sound rate limiting |
+| `input` | `ThoriumReflexController`, `ReflexEventPump`, `ThoriumInputPacer` | Late input sampling (REQ-HEAD-7): the decision, the accounting and the platform seam for draining the event queue. `ThoriumInputPacer` is the leftover telemetry-only counter (no call site — see `state.md` §4.2) |
 | `texture` | `ThoriumTextureThrottler` | Animated-texture upload throttling |
-| `particle` | `ThoriumParticleBudget`, `ParticleBatchEngine`, `ParticleBatchPool`, `ParticleQuad` | Particle creation budget, sheet batching |
+| `particle` | `ThoriumParticleBudget`, `ExplosionShield`, `ExplosionParticleFilter`, `ParticleBatchEngine`, `ParticleBatchPool`, `ParticleQuad` | Particle creation budget, explosion & firework shield, sheet batching |
 | `adaptive` | `AdaptiveDistanceController`, `RenderDistanceGovernor` | EMA-driven render-distance governor and its binding to the game option |
 | `instancing` | `EntityInstancer`, `EntityGroupManager`, `EntityGroup`, `EntityInstanceData` | GPU entity instancing |
 | `lighting` | `AsyncLightEngine` | Async light update queue + worker |
 | `batch` | `ThoriumImmediateBatcher` | Immediate-mode 2D draw batching policy |
-| `render` | `HudBatcher`, `GlStateTracker` | HUD draw merging, redundant GL state filtering |
+| `render` | `HudBatcher`, `GlStateTracker`, `WeatherFogOptimizer` | HUD draw merging, redundant GL state filtering, the weather-mode and fog-clamp policy (REQ-HEAD-8 / REQ-HEAD-9) |
 | `env` | `LauncherEnvironment` | Launcher/GC/heap evidence probe |
 | `gui` | `ThoriumGuiManager`, `ThoriumSettingsLayout`, `ThoriumSettingRows`, `ThoriumToastQueue` + per-version screens | HUD state, Extreme FPS toggle, telemetry summary, shared settings-row catalogue, in-game toast notifications |
 | `telemetry` | `ThoriumStutterHunter`, `ThoriumPhaseTimer`, `ThoriumGcWatcher` | Per-frame phase breakdown, GC pause correlation, instant stutter attribution |
@@ -259,6 +261,11 @@ code. Mixins call *into* policy engines; policy engines never call mixins.
 | Distance scale triggers | > 20 ms shrink, < 14 ms grow | `AsyncOcclusionCuller` |
 | Entity cull distance | 64.0 (Extreme 24.0) | `AsyncOcclusionCuller` |
 | Block entity cull distance | 48.0 (Extreme 16.0) | `AsyncOcclusionCuller` |
+| Storage container cull distance | 32.0 (Extreme 16.0) | `StorageCullingEngine` |
+| Item frame cull distance | 24.0 (Extreme 12.0) | `StorageCullingEngine` |
+| Focal cone half angle | 45° (cos 0.7071) | `StorageCullingEngine` |
+| Focal cone minimum distance | 16.0 (Extreme 8.0) | `StorageCullingEngine` |
+| Storage enclosure probes | 6 face neighbours, short-circuiting | `StorageCullingEngine` |
 | Particle budget / distance | 1500 (Extreme 64) / 1024.0 (Extreme 144.0) | `AsyncOcclusionCuller` |
 | Section cull distance | 256.0 (Extreme 128.0) | `SectionCullingEngine` |
 | Direct buffer size classes | 2^12 – 2^20, 4 per class | `DirectBufferPool` |
@@ -273,14 +280,30 @@ code. Mixins call *into* policy engines; policy engines never call mixins.
 | AFK Eco target frame rate | 10 FPS | `ThoriumAfkManager` |
 | AFK Eco default timeout | 60 s (5 s – 3600 s) | `ThoriumFeatureToggles` |
 | Stutter spike threshold | `max(30 ms, 2.5 × avg)` with 12 ms jitter | `ThoriumStutterHunter` |
-| Explosion particle burst cap | 250 particles/s | `ExplosionShield` |
-| Mob farm cluster threshold | > 15 entities in 5×5 blocks | `MobFarmOptimizer` |
+| Explosion particle burst cap | 250 particles/s (continuously refilled bucket) | `ExplosionShield` |
+| Explosion per-cell cap | 48 particles/s per 1×1×1 block cell | `ExplosionShield` |
+| Explosion protected particles | first of each category per cell burst | `ExplosionShield` |
+| Explosion cell idle window | 250 ms | `ExplosionShield` |
+| Priority particle admissions | outside the creation budget | `ThoriumParticleBudget` |
+| Mob farm cluster threshold | > 15 entities of one species in a 5×5 block cell | `MobFarmOptimizer` |
+| Mob farm animation rate | one frame out of three | `MobFarmOptimizer` |
+| Mob farm focus radius | 4 blocks around the camera | `MobFarmOptimizer` |
+| Mob farm sound budget | 6 events / 50 ms, dampened to 50 % | `ThoriumSoundGovernor` |
 | Elytra flight speed threshold | > 15 m/s | `ElytraFlightSmoother` |
+| Elytra forward cone | 45° forward, 45° rear | `ElytraFlightSmoother` |
+| Elytra minimum defer distance | 16 blocks from the camera | `ElytraFlightSmoother` |
+| Elytra maximum defer window | 500 ms | `ThoriumChunkUploadPacer` |
+| Deferred section release budget | 8 sections per frame | `ThoriumChunkUploadPacer` |
 | Reflex upload cone | 45° forward | `ThoriumChunkUploadPacer` |
+| Late input sample point | `MouseHandler#handleAccumulatedMovement`, at HEAD | `core.ReflexInputMixin` |
+| Fresh-input threshold | 0.01 px of cursor movement | `ThoriumReflexController` |
+| Underwater fog end (clamped) | 48 blocks (vanilla 96) | `WeatherFogOptimizer` |
+| Distance fog band (narrowed) | 24 blocks (vanilla `clamp(viewDistance/10, 4, 64)`) | `WeatherFogOptimizer` |
+| Weather splash particle | `ParticleTypes.RAIN`, dropped in `MINIMAL` and `OFF` | `WeatherFogOptimizer` |
 
 ### 3.4 The headline feature registry
 
-The eight player-facing "headline" features (REQ-HEAD-1 … REQ-HEAD-9) are delivered
+The ten player-facing "headline" features (REQ-HEAD-1 … REQ-HEAD-10) are delivered
 as a sequence of independent steps, so their **configuration** lives in one place:
 `dev.hyperionfps.core.ThoriumFeatureToggles`.
 
@@ -354,6 +377,62 @@ Presets are applied from the video settings screen (per-version `ThoriumVideoSet
 > the dynamic distance scale and fed the adaptive-distance EMA hundreds of times per
 > frame.
 
+### 4.3a Late input sampling (REQ-HEAD-7)
+
+The game drains the platform event queue at one point of the frame and then applies
+the collected cursor movement to the camera a moment later. Everything the player
+does while the frame is working therefore reaches the camera one frame late.
+
+Thorium drains the queue a **second** time, at the last moment at which the result
+is still useful:
+
+```
+tick ──► MouseHandler#handleAccumulatedMovement ──► camera matrix ──► render
+             ▲
+             └─ Thorium drains the platform queue here
+```
+
+| Rule | Detail |
+| :--- | :--- |
+| The sample point | `MouseHandler#handleAccumulatedMovement`, at HEAD — the game calls it immediately before it builds the camera matrix on all five nodes |
+| The drain | the game's own routine (`GLFW.glfwPollEvents` on 1.21.x, `RenderSystem.pollEvents` on 26.1/26.2, `RenderSystem.pollEvents(SDLEventHandler)` on 26.3), never a re-implementation |
+| Exactly once | the queue is *drained*, not copied, so every event is still delivered exactly once — only earlier |
+| The tick is untouched | the movement packets the client sends are the ones vanilla would have sent |
+| The camera is untouched | the game still applies the movement, with its own smoothing and sensitivity |
+| Guard | the sample only runs when the feature is on, the window has the focus and the node can drain its queue |
+| Accounting | the recovered cursor movement is measured and reported; the feature never advertises a fixed latency figure |
+
+### 4.3b Weather modes and fog clamps (REQ-HEAD-8, REQ-HEAD-9)
+
+Two independent switches, one shared policy engine (`WeatherFogOptimizer`).
+
+**The weather mode** (`render.weather.mode`) decides what the precipitation layer does:
+
+| Mode | Rain sheets | Ground splash particles | Rain sound | World / server weather |
+| :--- | :--- | :--- | :--- | :--- |
+| `VANILLA` | drawn | drawn | plays | untouched |
+| `MINIMAL` | drawn | **dropped** | plays | untouched |
+| `OFF` | **not drawn** | **dropped** | plays | untouched |
+
+**The fog clamps** (`render.clean_water_fog.enabled`) rewrite two fog ranges:
+
+| Range | Vanilla | Thorium |
+| :--- | :--- | :--- |
+| Underwater fog | `−8 … 96` blocks | `0 … 48` blocks |
+| Distance fog band | `clamp(viewDistance/10, 4, 64)` blocks | at most **24** blocks (never widened) |
+
+| Rule | Detail |
+| :--- | :--- |
+| The splash is dropped at the particle call | `ClientLevel#addParticle(ParticleOptions, double×6)` — this is where the splash particle is spawned; the weather method that calls it plays the rain sound separately, so cancelling the particle call suppresses only the splash and leaves the rain sound intact |
+| The precipitation layer is dropped at the render call | one hook per era, on the method that draws the rain sheets |
+| The fog is rewritten at the point the game computes it | 1.21.1 reads and writes `RenderSystem`'s shader fog; 1.21.11 hooks the water environment and the band clamp; 26.x rewrites the `FogData` the renderer uploads |
+| Lava and powdered snow keep their fog | only water is "clean water" |
+| The band is never widened | at the default render distance vanilla already uses a 19 block band, so nothing changes there |
+
+**No fill-rate claim.** The fog shader computes its blend for every fragment whether the
+band is 24 or 64 blocks wide. The measurable work reduction of this step is the splash
+particle flood, and the console says so.
+
 ### 4.4 Hotkeys
 
 | Key | Action | Availability |
@@ -392,7 +471,7 @@ not silently drop settings.
 | `frame.pacer.targetFps` | Frame cap for the pacer; `0` = uncapped | `0` |
 | `compat.autoYield` | Stand down the culling for a competing renderer | `true` |
 | `math.fast.enabled` | Fast-math overrides of `Mth` (off under a shader pack) | `false` |
-| `input.pacer.enabled` | Reflex-style input pacing | `true` |
+| `input.pacer.enabled` | *telemetry only* — the leftover turn counter; the live Reflex lives under `input.reflex.enabled` | `true` |
 | `chunk.uploader.enabled` | Budgeted chunk upload pacer | `true` |
 | `texture.throttler.enabled` | Animated-texture throttling | `true` |
 | `texture.throttler.divider` | Texture throttle rate | `2` |
@@ -416,7 +495,7 @@ not silently drop settings.
 | `particle.explosion_shield.enabled` | Explosion & Firework Shield (capping particle flood spam) | `true` |
 | `input.reflex.enabled` | Ultra Low-Latency Reflex (late-frame input sampling) | `true` |
 | `render.weather.mode` | No-Lag Weather rendering mode (`VANILLA`, `MINIMAL`, `OFF`) | `MINIMAL` |
-| `render.clean_water_fog.enabled` | Clean Water & Fast Fog optimization | `true` |
+| `render.clean_water_fog.enabled` | Clean Water & Fast Fog (underwater fog clamp + distance fog band) | `true` |
 
 Persistence rules:
 * The file is written on every user action (toggle click, preset selection, screen close).
@@ -465,6 +544,9 @@ measurement or a value the game owns:
 | `AdaptiveDistanceController.enabled` | `AtomicBoolean` | `false` (opt-in, persisted) |
 | `ThoriumGuiManager.HUD_ENABLED` | `AtomicBoolean` | `true` (persisted) |
 | `AdaptiveDistanceController.currentDistance` | `volatile int` | `12` (adapted at runtime) |
+| `StorageCullingEngine` counters | `AtomicLong` ×4 | `0` (measured at runtime) |
+| `ThoriumReflexController.pump` | `volatile ReflexEventPump` | `NONE` (installed per node at client init) |
+| `ThoriumReflexController` counters | `AtomicLong` ×3 | `0` (measured at runtime) |
 
 ### 5.4 External inputs
 
@@ -512,6 +594,13 @@ A release is valid only when:
    target fails the build instead of the runtime.
 6. `README.md` and `MODRINTH.md` list the correct version matrix and hotkeys.
 7. `state.md` reflects the shipped state.
+
+**Last verified:** 2026-10-22 (roadmap step 10). `./gradlew test` green on all five
+nodes — **317 tests / 42 classes** each, 0 failures, 0 errors, 0 skipped.
+`./gradlew buildAll` produced five `0.1.2` jars in `build/dist/`, and the per-node
+`fabric.mod.json` resolved its `${id}` / `${version}` / `${minecraft}` /
+`${java_version}` placeholders. `MixinTargetAuditTest` passed on every node
+(12 `core` + 21–23 `legacy` + 20–21 `modern` mixins per node).
 
 ---
 

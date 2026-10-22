@@ -125,13 +125,18 @@ class ThoriumSettingRowsTest {
 
     @Test
     void theChunkUploadPacerIsHonestAboutTheVersionItRunsOn() {
+        // The legacy nodes split the GPU upload itself into a per-frame budget; the
+        // 26.x nodes cannot, so they budget the section builds instead. Both are
+        // wired, so both rows are a working switch.
         Spec legacy = findByTitle(ThoriumSettingRows.performanceRows(true), "Chunk Upload Pacer");
         assertEquals(ThoriumSettingRows.ControlType.CYCLE, legacy.controlType());
         assertTrue(legacy.enabled().get());
+        assertEquals("2.5ms Cap", legacy.status().get());
 
         Spec modern = findByTitle(ThoriumSettingRows.performanceRows(false), "Chunk Upload Pacer");
-        assertEquals("NOT AVAILABLE ON 26.x", modern.status().get());
-        assertFalse(modern.enabled().get());
+        assertEquals(ThoriumSettingRows.ControlType.CYCLE, modern.controlType());
+        assertTrue(modern.enabled().get());
+        assertEquals("Flight Order", modern.status().get());
     }
 
     @Test

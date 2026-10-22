@@ -4,26 +4,30 @@ import java.util.ArrayList;
 import java.util.List;
 
 import dev.hyperionfps.adaptive.AdaptiveDistanceController;
+import dev.hyperionfps.anim.MobFarmOptimizer;
 import dev.hyperionfps.anim.ThoriumEntityLodThrottler;
 import dev.hyperionfps.audio.ThoriumSoundGovernor;
 import dev.hyperionfps.batch.ThoriumImmediateBatcher;
+import dev.hyperionfps.chunk.ElytraFlightSmoother;
 import dev.hyperionfps.chunk.ThoriumChunkUploadPacer;
 import dev.hyperionfps.culling.AsyncOcclusionCuller;
 import dev.hyperionfps.culling.OcclusionGrid;
 import dev.hyperionfps.culling.SectionCullingEngine;
+import dev.hyperionfps.culling.StorageCullingEngine;
 import dev.hyperionfps.culling.ThoriumBvhCuller;
 import dev.hyperionfps.frame.ThoriumFrameContext;
 import dev.hyperionfps.frame.ThoriumFramePacer;
 import dev.hyperionfps.input.ThoriumInputPacer;
+import dev.hyperionfps.input.ThoriumReflexController;
 import dev.hyperionfps.instancing.EntityInstancer;
 import dev.hyperionfps.lighting.AsyncLightEngine;
+import dev.hyperionfps.particle.ExplosionShield;
 import dev.hyperionfps.particle.ParticleBatchEngine;
 import dev.hyperionfps.particle.ThoriumParticleBudget;
+import dev.hyperionfps.render.WeatherFogOptimizer;
 import dev.hyperionfps.render.batching.HudBatcher;
 import dev.hyperionfps.render.state.GlStateTracker;
 import dev.hyperionfps.texture.ThoriumTextureThrottler;
-import dev.hyperionfps.version.Era;
-import dev.hyperionfps.version.GameVersionDetector;
 
 /**
  * Reports what Thorium is <em>actually</em> doing on this session.
@@ -67,7 +71,6 @@ public final class ThoriumSubsystemReport {
     /** Builds the report from the live state of every subsystem. */
     public static List<Entry> collect() {
         List<Entry> entries = new ArrayList<>();
-        boolean legacyEra = GameVersionDetector.detect().era() == Era.LEGACY;
         long clientFrames = ThoriumFrameContext.clientFrameCount();
         long worldFrames = ThoriumFrameContext.worldFrameCount();
 
@@ -97,6 +100,13 @@ public final class ThoriumSubsystemReport {
                         : (worldFrames > 0 ? Status.ACTIVE : Status.UNWIRED),
                 "distance + frustum + raycast"));
 
+        entries.add(new Entry("storage-culling",
+                !StorageCullingEngine.isEnabled() ? Status.DISABLED
+                        : (StorageCullingEngine.getContainersCulled() + StorageCullingEngine.getItemFramesCulled() > 0
+                                ? Status.ACTIVE : Status.IDLE),
+                StorageCullingEngine.describeActivity()
+                        + ", " + StorageCullingEngine.getOpenContainersExempt() + " open containers kept"));
+
         entries.add(new Entry("particle-budget",
                 !ThoriumParticleBudget.isEnabled() ? Status.DISABLED
                         : (ThoriumParticleBudget.getAdmitted() + ThoriumParticleBudget.getRejected() > 0
@@ -122,7 +132,8 @@ public final class ThoriumSubsystemReport {
         entries.add(new Entry("sound-governor",
                 !ThoriumSoundGovernor.isEnabled() ? Status.DISABLED
                         : (ThoriumSoundGovernor.getSoundsSuppressed() > 0 ? Status.ACTIVE : Status.IDLE),
-                ThoriumSoundGovernor.getSoundsSuppressed() + " sounds suppressed"));
+                ThoriumSoundGovernor.getSoundsSuppressed() + " sounds suppressed, "
+                        + ThoriumSoundGovernor.getClusterSoundsDampened() + " mob farm sounds dampened"));
 
         entries.add(new Entry("texture-throttler",
                 !ThoriumTextureThrottler.isEnabled() ? Status.DISABLED
@@ -144,13 +155,11 @@ public final class ThoriumSubsystemReport {
                         + (int) AdaptiveDistanceController.getInstance().getSmoothedFps() + " FPS"));
 
         entries.add(new Entry("chunk-upload-pacer",
-                !legacyEra ? Status.UNSUPPORTED
-                        : (!ThoriumChunkUploadPacer.isEnabled() ? Status.DISABLED
-                                : (ThoriumChunkUploadPacer.getTotalUploads() > 0 ? Status.ACTIVE : Status.IDLE)),
-                legacyEra
-                        ? ThoriumChunkUploadPacer.getTotalUploads() + " uploads, "
-                                + ThoriumChunkUploadPacer.getYieldedFrames() + " frames yielded"
-                        : "the 26.x upload pipeline has no Thorium hook"));
+                !ThoriumChunkUploadPacer.isEnabled() ? Status.DISABLED
+                        : (ThoriumChunkUploadPacer.getTotalUploads()
+                                + ThoriumChunkUploadPacer.getReleasedSections() > 0
+                                ? Status.ACTIVE : Status.IDLE),
+                ThoriumChunkUploadPacer.describeActivity()));
 
         // --- Implemented, exposed in the console, but never invoked. -------------
         entries.add(new Entry("section-culling", Status.UNWIRED,
@@ -173,18 +182,83 @@ public final class ThoriumSubsystemReport {
         // console and the log never advertise a switch that cannot do anything.
         for (ThoriumFeatureToggles.Feature feature : ThoriumFeatureToggles.Feature.values()) {
             entries.add(new Entry(feature.reportName(),
-                    !feature.isWired() ? Status.UNWIRED
-                            : (!feature.isEnabled() ? Status.DISABLED : Status.IDLE),
-                    !feature.isWired() ? "the implementation has not landed yet"
-                            : (feature.isEnabled() ? "enabled" : "disabled by the player")));
+                    headlineStatus(feature), headlineDetail(feature)));
         }
 
         entries.add(new Entry("weather-rendering",
                 ThoriumFeatureToggles.getWeatherMode() == ThoriumFeatureToggles.WeatherMode.VANILLA
-                        ? Status.IDLE : Status.ACTIVE,
-                ThoriumFeatureToggles.getWeatherMode().name()));
+                        ? Status.IDLE
+                        : (WeatherFogOptimizer.getPrecipitationPassesSkipped()
+                                + WeatherFogOptimizer.getSplashParticlesSuppressed() > 0
+                                ? Status.ACTIVE : Status.IDLE),
+                WeatherFogOptimizer.describeActivity()));
 
         return entries;
+    }
+
+    /**
+     * The lifecycle state of a headline feature.
+     *
+     * <p>A feature that has landed and is measurably doing work reports
+     * {@link Status#ACTIVE}; one that is wired but has not been exercised yet
+     * reports {@link Status#IDLE}.</p>
+     */
+    private static Status headlineStatus(ThoriumFeatureToggles.Feature feature) {
+        if (!feature.isWired()) {
+            return Status.UNWIRED;
+        }
+        if (!feature.isEnabled()) {
+            return Status.DISABLED;
+        }
+        if (feature == ThoriumFeatureToggles.Feature.MOB_FARM
+                && MobFarmOptimizer.getAnimationsSkipped() > 0) {
+            return Status.ACTIVE;
+        }
+        if (feature == ThoriumFeatureToggles.Feature.EXPLOSION_SHIELD
+                && ExplosionShield.getCulledRedundant() + ExplosionShield.getCulledOverRate() > 0) {
+            return Status.ACTIVE;
+        }
+        if (feature == ThoriumFeatureToggles.Feature.ELYTRA_SMOOTHER
+                && ElytraFlightSmoother.getDeferredBehind() > 0) {
+            return Status.ACTIVE;
+        }
+        if (feature == ThoriumFeatureToggles.Feature.REFLEX
+                && ThoriumReflexController.getFreshInputFrames() > 0) {
+            return Status.ACTIVE;
+        }
+        if (feature == ThoriumFeatureToggles.Feature.CLEAN_WATER_FOG
+                && WeatherFogOptimizer.getFogClampsApplied() > 0) {
+            return Status.ACTIVE;
+        }
+        return Status.IDLE;
+    }
+
+    /**
+     * The detail line of a headline feature.
+     *
+     * <p>The mob farm optimizer reports what it has actually done, so the log shows
+     * a number instead of a promise.</p>
+     */
+    private static String headlineDetail(ThoriumFeatureToggles.Feature feature) {
+        if (!feature.isWired()) {
+            return "the implementation has not landed yet";
+        }
+        if (feature == ThoriumFeatureToggles.Feature.MOB_FARM) {
+            return MobFarmOptimizer.describeActivity();
+        }
+        if (feature == ThoriumFeatureToggles.Feature.EXPLOSION_SHIELD) {
+            return ExplosionShield.describeActivity();
+        }
+        if (feature == ThoriumFeatureToggles.Feature.ELYTRA_SMOOTHER) {
+            return ElytraFlightSmoother.describeActivity();
+        }
+        if (feature == ThoriumFeatureToggles.Feature.REFLEX) {
+            return ThoriumReflexController.describeActivity();
+        }
+        if (feature == ThoriumFeatureToggles.Feature.CLEAN_WATER_FOG) {
+            return WeatherFogOptimizer.describeFogActivity();
+        }
+        return feature.isEnabled() ? "enabled" : "disabled by the player";
     }
 
     /** Renders the report as an aligned, multi-line block. */

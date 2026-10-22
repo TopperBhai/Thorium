@@ -10,6 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.resource.GraphicsResourceAllocator;
+import dev.hyperionfps.chunk.PlayerVelocityPublisher;
 import dev.hyperionfps.frame.ThoriumFrameContext;
 import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
@@ -37,6 +38,9 @@ public abstract class LegacyLevelRendererFrameMixin {
             GpuBufferSlice fogBuffer, Vector4f fogColor, boolean renderClouds,
             CallbackInfo ci) {
         Vec3 pos = camera.position();
+        // The Elytra Flight Smoother needs the flight vector of this frame before the
+        // deferred chunk sections are released.
+        PlayerVelocityPublisher.publish();
         ThoriumFrameContext.beginWorldFrame(pos.x, pos.y, pos.z, null, this.level);
     }
 }

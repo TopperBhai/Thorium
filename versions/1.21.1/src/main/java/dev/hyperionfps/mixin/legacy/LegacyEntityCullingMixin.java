@@ -5,7 +5,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import dev.hyperionfps.culling.AsyncOcclusionCuller;
+import dev.hyperionfps.culling.StorageCullingEngine;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.world.entity.Entity;
@@ -24,7 +24,7 @@ public abstract class LegacyEntityCullingMixin {
     private <E extends Entity> void hyperionfps$cullOccludedEntities(
             E entity, Frustum frustum, double camX, double camY, double camZ,
             CallbackInfoReturnable<Boolean> cir) {
-        if (AsyncOcclusionCuller.shouldCullEntity(entity, camX, camY, camZ)) {
+        if (StorageCullingEngine.shouldCullEntity(entity, camX, camY, camZ)) {
             cir.setReturnValue(false);
         }
     }

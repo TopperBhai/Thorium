@@ -7,6 +7,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import dev.hyperionfps.chunk.PlayerVelocityPublisher;
 import dev.hyperionfps.frame.ThoriumFrameContext;
 import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
@@ -39,6 +40,9 @@ public abstract class LegacyLevelRendererFrameMixin {
             GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f modelViewMatrix, Matrix4f projectionMatrix,
             CallbackInfo ci) {
         Vec3 pos = camera.getPosition();
+        // The Elytra Flight Smoother needs the flight vector of this frame before the
+        // deferred chunk sections are released.
+        PlayerVelocityPublisher.publish();
         ThoriumFrameContext.beginWorldFrame(pos.x, pos.y, pos.z, this.cullingFrustum, this.level);
     }
 }

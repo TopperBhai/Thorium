@@ -3,11 +3,23 @@ package dev.hyperionfps.input;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Beyond-Sodium Low-Latency Input Pacing Engine (Reflex-Style).
+ * A counter of the mouse turns that were sampled late.
  *
- * <p>Optimizes mouse input polling and camera rotational interpolation to
- * eliminate mouse floatiness and input lag. Synchronizes cursor deltas directly
- * with the display refresh cycle.</p>
+ * <p><b>History.</b> This class used to carry the whole "Reflex-style input pacing"
+ * promise while doing nothing at all - it had no call site, no budget and no timing
+ * logic, and the roadmap entry that described it (A-12) admitted that the claim was
+ * false. The real feature now exists: {@link ThoriumReflexController} drains the
+ * platform event queue at the tail of the frame and applies the freshest mouse
+ * movement to the camera of the frame the player is looking at.</p>
+ *
+ * <p>The counter below is the telemetry face of that feature. It is kept separate
+ * because the settings console, the presets and {@code thorium-config.json} already
+ * reference the class and its key; removing them would be a breaking change to the
+ * configuration format, and that is a separate decision (see the A-12 entry in
+ * {@code PLAN.md}).</p>
+ *
+ * <p>Until it is wired, this class is a counter with no call site, and the startup
+ * report says so: the subsystem report lists it as {@code UNWIRED}.</p>
  */
 public final class ThoriumInputPacer {
 

@@ -3,7 +3,7 @@
 **Project:** Thorium (`thorium` / Th-90) — Minecraft client-side optimization mod
 **Repo:** `https://github.com/TopperBhai/Thorium` · **Local:** `F:\Toperion Optimization`
 **Branch:** `main` · **HEAD:** `948ec68` (+ uncommitted v0.2 groundwork) · **Working tree:** modified
-**Mod version:** 0.1.2 · **Last verified:** 2026-10-21
+**Mod version:** 0.1.2 · **Last verified:** 2026-10-22
 
 > This document is the **status board**. It records what is built, what is verified, what
 > is broken or missing, and what to do next. Requirements → [`spec.md`](./spec.md).
@@ -17,7 +17,7 @@
 | :--- | :--- | :--- |
 | Core subsystems | 🟢 Complete | All 18 packages implemented with metrics and toggles |
 | Multi-version build | 🟢 Complete | 5 nodes, shared source tree, era-routed mixins |
-| Unit tests | 🟢 Green | 178 tests / 35 classes, 0 failures on all five nodes |
+| Unit tests | 🟢 Green | 317 tests / 42 classes, 0 failures on all five nodes |
 | Build | 🟢 Green | `buildAll` produces 5 jars |
 | Mixin target audit | 🟢 Fixed | A dead mixin target now **fails the build** (G-12) |
 | Frame context | 🟢 Fixed | One authoritative per-frame publisher on all five nodes (A-3) |
@@ -31,7 +31,7 @@
 | Mod coexistence | 🟢 Fixed | Sodium/Embeddium and shader packs are detected; Thorium stands down (D-1/D-2) |
 | Startup log honesty | 🟢 Fixed | A live subsystem report replaces the hardcoded claims (A-13/D-4) |
 | Dead subsystems | 🔴 Open | 7 implemented subsystems still have **no call site** — see §4.2 |
-| Headline Innovation Plan | 🟡 In Progress | **Steps 1–3 done** (config matrix + AFK Eco + Stutter Hunter); Step 4 (Storage Culling) is next |
+| Headline Innovation Plan | ✅ **Complete** | **All 10 steps done** (config matrix + AFK Eco + Stutter Hunter + Storage Culling + Mob Farm Optimizer + Explosion & Firework Shield + Elytra Flight Smoother + Ultra Low-Latency Reflex + No-Lag Weather & Clean Water / Fast Fog + multi-version verification & release prep). The remaining v0.2 work is tracked in [`PLAN.md`](./PLAN.md). |
 | Settings console duplication | 🟢 Fixed | The rows and the presets live in shared code now — 5 screens, one catalogue |
 | Performance validation | 🟡 Unverified | No in-game benchmark harness or capture tooling (G-7) |
 | Release tagging | 🔴 Missing | No git tags for 0.1.1 (G-11) |
@@ -45,24 +45,46 @@ but not yet connected to the game (see §4.2), plus the missing benchmark harnes
 
 ---
 
-## 2. Build & test baseline (verified 2026-10-21)
+## 2. Build & test baseline (verified 2026-10-22 — roadmap step 10)
 
 | Command | Result |
 | :--- | :--- |
 | `./gradlew :26.3:compileJava` | ✅ `EXIT=0` |
-| `./gradlew :26.3:test` | ✅ `BUILD SUCCESSFUL` — **167 tests**, 0 failures, 0 errors, 0 skipped |
-| `./gradlew test` | ✅ green on **all five** nodes (167 tests each) |
+| `./gradlew :26.3:test` | ✅ `BUILD SUCCESSFUL` — **317 tests**, 0 failures, 0 errors, 0 skipped |
+| `./gradlew test` | ✅ green on **all five** nodes (317 tests / 42 classes each) |
 | `./gradlew buildAll` | ✅ `BUILD SUCCESSFUL` — 5 jars in `build/dist/` |
 
 Verified artifacts in `build/dist/`:
 
 | Jar | Size |
 | :--- | ---: |
-| `thorium-0.1.2+1.21.1.jar` | 223 233 B |
-| `thorium-0.1.2+1.21.11.jar` | 220 056 B |
-| `thorium-0.1.2+26.1.jar` | 218 237 B |
-| `thorium-0.1.2+26.2.jar` | 218 455 B |
-| `thorium-0.1.2+26.3.jar` | 218 377 B |
+| `thorium-0.1.2+1.21.1.jar` | 280 713 B |
+| `thorium-0.1.2+1.21.11.jar` | 279 871 B |
+| `thorium-0.1.2+26.1.jar` | 275 984 B |
+| `thorium-0.1.2+26.2.jar` | 276 206 B |
+| `thorium-0.1.2+26.3.jar` | 276 865 B |
+
+The stale `0.1.1` jars that an earlier build had left in `build/dist/` were removed,
+so the directory now holds exactly the five release artifacts of the current version.
+
+### Mixin target audit — green on all five nodes
+
+`MixinTargetAuditTest` ran on every node and reported 0 failures. The mixin
+inventory it audited:
+
+| Node | `core` | `legacy` | `modern` | Total |
+| :--- | ---: | ---: | ---: | ---: |
+| 1.21.1 | 12 | 21 | — | 33 |
+| 1.21.11 | 12 | 23 | — | 35 |
+| 26.1 | 12 | — | 20 | 32 |
+| 26.2 | 12 | — | 20 | 32 |
+| 26.3 | 12 | — | 21 | 33 |
+
+The audit is not vacuous: it fails the build if the expanded `thorium.mixins.json`
+is empty, if it still contains an unexpanded `${...}` placeholder, if a registered
+mixin has no compiled class, if an injection selector matches no method on that
+node's Minecraft jar, if an accessor field was renamed, or if a compiled mixin is
+not registered in the configuration.
 
 ### Build warnings observed
 
@@ -81,9 +103,9 @@ task** — only `:1.21.1` and `:1.21.11` do. Use `assemble` / `build` for the mo
 
 | Metric | Count |
 | :--- | ---: |
-| Shared main sources (`src/main/java`) | 72 files |
-| Shared test sources (`src/test/java`) | 34 classes / 167 tests |
-| Version-specific sources | 19 files/node (26.x), 21 (1.21.1), 20 (1.21.11) |
+| Shared main sources (`src/main/java`) | 89 files |
+| Shared test sources (`src/test/java`) | 42 classes / 317 tests |
+| Version-specific sources | 24 files/node (26.1, 26.2), 25 (26.3), 25 (1.21.1), 27 (1.21.11) |
 | Version nodes | 5 |
 | Git commits | 6 (this cycle's work is uncommitted) |
 ## 3. Subsystem inventory
@@ -92,23 +114,23 @@ task** — only `:1.21.1` and `:1.21.11` do. Use `assemble` / `build` for the mo
 | :--- | :--- | :--- | --- |
 | `core` | ✅ | `ThreadGovernorTest` | Thread capture, priority elevation, telemetry kill-switch |
 | `frame` | ✅ | `FramePacingTest`, `ThoriumFrametimeTrackerTest`, `ThoriumFrameContextTest`, `ThoriumAfkManagerTest` | 128-sample tracker, sleep→spin pacer, authoritative frame context, AFK power saver |
-| `culling` | ✅ | `CullingEngineTest`, `OcclusionGridTest`, `SectionCullingEngineTest` | Grid, raycast, BVH, frustum cache |
+| `culling` | ✅ | `CullingEngineTest`, `OcclusionGridTest`, `SectionCullingEngineTest`, `StorageCullingEngineTest` | Grid, raycast, BVH, frustum cache, storage-room chest / item-frame culler |
 | `memory` | ✅ | `DirectBufferPoolTest`, `IdleJanitorTest`, `ThoriumMemoryOptimizerTest`, `ZeroAllocationPoolTest` | Direct pools, off-heap release, janitor |
-| `chunk` | ✅ | `ThoriumChunkUploadPacerTest` | Dual-budget upload pacer |
-| `anim` | ✅ | *(via `BeyondSodiumFeaturesTest`)* | Distance-based LOD |
-| `audio` | ✅ | *(via `BeyondSodiumFeaturesTest`)* | Spatial sound rate limit |
-| `input` | ✅ | *(via `BeyondSodiumFeaturesTest`)* | Telemetry-only counter; **no real pacing logic** |
+| `chunk` | ✅ | `ThoriumChunkUploadPacerTest`, `ElytraFlightSmootherTest` | Dual-budget upload pacer + the directional (flight-vector) deferred section queue |
+| `anim` | ✅ | `MobFarmOptimizerTest`, *(via `BeyondSodiumFeaturesTest`)* | Distance-based LOD + mob farm cluster throttling |
+| `audio` | ✅ | `ThoriumSoundGovernorTest`, *(via `BeyondSodiumFeaturesTest`)* | Spatial sound rate limit + mob farm acoustic dampening |
+| `input` | ✅ | `ThoriumReflexControllerTest` | Late input sampling (REQ-HEAD-7): the platform event queue is drained a second time at the tail of the frame, so the movement the player made while the frame was working is applied to the frame they are looking at. The leftover `ThoriumInputPacer` counter is still telemetry-only (§4.2) |
 | `texture` | ✅ | `ThoriumTextureThrottlerTest` | Animated-texture throttling |
-| `particle` | ✅ | `ParticleBatchingTest`, `BeyondSodiumFeaturesTest` | Creation budget + culling live on all 5 nodes; sheet batching still unwired (§4.2) |
+| `particle` | ✅ | `ParticleBatchingTest`, `ExplosionShieldTest`, `BeyondSodiumFeaturesTest` | Creation budget + culling live on all 5 nodes; explosion & firework shield live; sheet batching still unwired (§4.2) |
 | `instancing` | ✅ | `EntityInstancingTest` | GPU instance batches |
 | `lighting` | ✅ | `AsyncLightEngineTest` | Async light queue + daemon worker |
 | `batch` | ✅ | `ThoriumImmediateBatcherTest` | Immediate-mode 2D batching |
-| `render` | ✅ | `RenderOptimizationTest` | HUD batching + GL state filter |
+| `render` | ✅ | `RenderOptimizationTest`, `WeatherFogOptimizerTest` | HUD batching + GL state filter; the No-Lag Weather modes and the Clean Water / Fast Fog clamps |
 | `adaptive` | ✅ | `AdaptiveDistanceTest` | EMA distance governor |
 | `env` | ✅ | *(none)* | Launcher/GC probe — read-only, low risk |
 | `gui` | ✅ | *(none)* | `ThoriumGuiManager` + per-version screens |
 | `version` | ✅ | `VersionBridgeTest`, `GameVersionTest` | Bridge, detection, era routing |
-| `mixin` | ✅ | `HyperionMixinPluginTest`, `MixinTargetAuditTest` | Era router: 6 core + 19-21 legacy + 17 modern mixins; every target audited at build time |
+| `mixin` | ✅ | `HyperionMixinPluginTest`, `MixinTargetAuditTest` | Era router: 12 core + 21–23 legacy + 20–21 modern mixins; every target **and every accessor field** audited at build time |
 
 ---
 
@@ -538,17 +560,28 @@ them as *not wired* / *not available* instead of pretending they work.
 | Async light propagation | `AsyncLightEngine` | the daemon worker starts but never receives work | A-9 |
 | GL state filter | `GlStateTracker` | `shouldBindTexture` / `shouldUseProgram` are never consulted | A-10 |
 | Immediate 2D batching | `ThoriumImmediateBatcher` | the flush runs every frame, but `shouldBatchDraw` is never consulted | A-11 |
-| Input pacing | `ThoriumInputPacer` | `recordPacedTurn()` has no call site | A-12 |
+| Input pacing | `ThoriumInputPacer` | `recordPacedTurn()` has no call site — **superseded** by the real Reflex (`ThoriumReflexController`, roadmap step 8), so the class is only a leftover counter now | A-12 |
 
 **Additionally unsupported on some versions:**
 
 | Subsystem | 1.21.1 | 1.21.11 | 26.1 | 26.2 | 26.3 |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| Chunk upload pacer | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
+| Chunk upload pacer (GPU upload budget) | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
+| Chunk upload pacer (flight-vector section queue) | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-The 26.x render pipeline uploads chunk meshes through a different path that Thorium
-does not hook yet (PLAN A-4). The console shows the switch as *not available* on
-those versions.
+The 26.x render pipeline copies every chunk mesh into shared GPU buffers in one go
+(`SectionRenderDispatcher#uploadTerrainBuffersToGpu`), so the **upload** itself cannot
+be split into a per-frame budget the way the 1.21.x `Queue<Runnable>` can. On 26.x
+the pacer therefore budgets the section **builds** instead — fewer sections are built
+per frame, so the upload burst shrinks. The console row says exactly that:
+"2.5ms Cap" on 1.21.x, "Flight Order" on 26.x.
+
+**The input pacer is the one that got superseded rather than wired.** The roadmap's
+step 8 delivered the real thing under a different name (`ThoriumReflexController`),
+so `ThoriumInputPacer` is now a counter with no caller. Its Javadoc says so, the
+startup report still lists it as `UNWIRED`, and deleting it together with its
+`input.pacer.enabled` config key stays in the backlog as A-12 / G-8 — removing a
+persisted key is a configuration-format change, not a code cleanup.
 
 ---
 ## 5. Risk register
@@ -563,6 +596,8 @@ those versions.
 | R-6 | Extreme FPS mode breaks "vanilla visuals" claims | Low | Medium | Mode is explicit and off by default |
 | R-7 | Multiplayer server-side detection bans the client | Low | Very Low | 100 % client-side, no packet tampering |
 | R-8 | Silent feature loss goes unnoticed (dead code paths, stale logs) | High | **Low now** | the build-time audit fails on a dead target; the startup log reports the real state of every subsystem |
+| R-9 | The storage culler pops a chest or item frame that is still on the screen | Medium | Low | A container is only skipped beyond the storage distance **and** outside the 45° focal cone, so a chest the player is looking at is never dropped; the open container and the other half of a double chest are exempt by identity, not by radius |
+| R-10 | The late input sample delivers an event twice, or at the wrong moment | Medium | **Low** | the platform queue is *drained* by the game's own routine, so every event is delivered exactly once — only earlier; the sample only runs while the window is focused, and a failing drain is caught and ignored |
 
 ---
 
@@ -580,7 +615,9 @@ those versions.
 3. **G-7** — build the benchmark/capture harness; the README table stays empty until
    the numbers are reproducible.
 4. **G-11** — tag `0.1.1`.
-5. **G-8** — implement real input pacing, or rename the class to telemetry-only.
+5. **G-8** — the real input pacing landed in step 8 (`ThoriumReflexController`); what
+   is left is to delete the superseded `ThoriumInputPacer` counter and its
+   `input.pacer.enabled` key, or to rename it to what it now is.
 
 ### P1 — quality & honesty
 
@@ -593,7 +630,8 @@ those versions.
 
 ### P2 — feature depth
 
-10. **A-12** — input pacing (or rename it).
+10. **A-12** — input pacing: the behaviour is implemented (step 8); the leftover
+    `ThoriumInputPacer` stub is still to be removed or renamed.
 11. **G-4 / G-5 (PLAN)** — `LegacyVignetteMixin` exists only on 1.21.1: port or drop.
 12. **G-9 (PLAN)** — `ThoriumFabricHooks` parity for the other four nodes.
 13. Add a release CI workflow that runs `buildAll`, `test` and the mixin audit on all
@@ -608,13 +646,13 @@ Organized in [`TODO.md`](./TODO.md) to deliver maximum player-facing value in co
 | **Step 1** | **Core Config & Settings Console Matrix** | 10 headline keys, presets, all 5 `ThoriumVideoSettingsScreen`s, Purge RAM button | ✅ **Done** | `ThoriumConfigTest` (155 tests), `test` (5/5), `buildAll` |
 | **Step 2** | **AFK Battery & Power Saver (Stealth AFK™)** | Inactivity / unfocused 10 FPS cap, CPU park, 0 ms wake | ✅ **Done** | `ThoriumAfkManagerTest` (12 tests), `test` (5/5) |
 | **Step 3** | **Instant Lag Spike Alert (Nuclear Stutter Hunter™)** | 5-phase breakdown, GC pause listener, HUD toast | ✅ **Done** | `ThoriumStutterHunterTest` (11 tests), `test` (5/5) |
-| **Step 4** | **Storage Room & Item Frame Culling** | Container & item frame occlusion and distance culling | ⏳ Next | `StorageCullingTest` |
-| **Step 5** | **Mob Farm & Swarm Optimizer** | Dense swarm animation decoupling & sound dampening | ⏳ Pending | `MobFarmOptimizerTest` |
-| **Step 6** | **Explosion & Firework Shield** | Particle burst rate-limiting (TNT/fireworks) | ⏳ Pending | `ExplosionShieldTest` |
-| **Step 7** | **Elytra Flight Smoother & Modern Chunk Upload Parity** | Forward-cone upload prioritization & 26.x Blaze3D hook | ⏳ Pending | `ChunkUploadPacerTest` |
-| **Step 8** | **Ultra Low-Latency Reflex (Late Input Sampling)** | Tail-of-frame input sync to cut input-to-photon lag | ⏳ Pending | `ReflexInputTest` |
-| **Step 9** | **No-Lag Weather & Clean Water / Fast Fog** | Rain sheet simplification & underwater fog clamping | ⏳ Pending | `WeatherFogTest` |
-| **Step 10** | **Multi-Version Verification, Mixin Audit & Final Release** | Full 5-node test, buildAll, MixinTargetAuditTest | ⏳ Pending | `test` (5/5), `buildAll` |
+| **Step 4** | **Storage Room & Item Frame Culling** | Container & item frame occlusion and distance culling | ✅ **Done** | `StorageCullingEngineTest` (30 tests), `test` (5/5), `buildAll` |
+| **Step 5** | **Mob Farm & Swarm Optimizer** | Dense swarm animation decoupling & sound dampening | ✅ **Done** | `MobFarmOptimizerTest` (18), `ThoriumSoundGovernorTest` (5), `test` (5/5) |
+| **Step 6** | **Explosion & Firework Shield** | Particle burst rate-limiting (TNT/fireworks) | ✅ **Done** | `ExplosionShieldTest` (21), `test` (5/5, 252 tests), `buildAll` |
+| **Step 7** | **Elytra Flight Smoother & Modern Chunk Upload Parity** | Forward-cone section prioritisation & 26.x chunk hook | ✅ **Done** | `ElytraFlightSmootherTest` (17), `ThoriumChunkUploadPacerTest` (12), `test` (5/5, 279 tests) |
+| **Step 8** | **Ultra Low-Latency Reflex (Late Input Sampling)** | The platform event queue is drained a second time at the tail of the frame, so movement made while the frame worked is applied to the frame on screen | ✅ **Done** | `ThoriumReflexControllerTest` (18), `test` (5/5, 297 tests), `buildAll` |
+| **Step 9** | **No-Lag Weather & Clean Water / Fast Fog** | Rain sheet simplification & underwater fog clamping | ✅ **Done** | `WeatherFogOptimizerTest` (19), `test` (5/5, 316 tests), `buildAll` |
+| **Step 10** | **Multi-Version Verification, Mixin Audit & Final Release** | Full 5-node test, buildAll, MixinTargetAuditTest | ✅ **Done** | `test` (5/5, 317 tests), `buildAll` (5 jars), mixin audit green on all 5 nodes |
 
 ### Completed in this cycle
 
@@ -640,10 +678,23 @@ Organized in [`TODO.md`](./TODO.md) to deliver maximum player-facing value in co
 | Android launch crash | ✅ Mitigated — safe-mode kill switch + 3 native-call guards |
 | **Roadmap Step 1** | ✅ Config + settings matrix — 10 headline keys persisted, shared `ThoriumFeatureToggles` registry, shared `ThoriumPresets`, shared `ThoriumSettingRows` catalogue rendered by all five screens |
 | **Roadmap Step 2** | ✅ AFK Battery & Power Saver — `ThoriumAfkManager` parks the render thread for 90 ms per frame (in 16 ms slices) when the window is unfocused or the player is idle for 60 s; mouse, click and key activity wake it immediately. New mixins: `core/AfkMouseActivityMixin`, `core/AfkKeyboardActivityMixin`, `legacy/LegacyAfkClickMixin`, `modern/ModernAfkClickMixin`. |
+| **Roadmap Step 6** | ✅ Explosion & Firework Shield — `ExplosionShield` (shared, pure policy) caps the explosion/firework/smoke particle flood with a global 250 particles/sec token bucket and a 48 particles/sec per-block-cell bucket, while the first particle of every category in a burst (the explosion flash and the primary puff) bypasses both limits *and* the global creation budget, so the feedback never disappears. `ExplosionParticleFilter` (shared) maps the vanilla particle types onto the categories and is the single entry point the `ParticleEngine#createParticle` hook uses; it falls back to `AsyncOcclusionCuller` for everything the shield does not handle. |
+| **Roadmap Step 7** | ✅ Elytra Flight Smoother — `ElytraFlightSmoother` (shared, pure policy) classifies a chunk section against the player's velocity vector: the sections inside a 45° forward cone are built first, the neutral ones next, the ones behind the player last. `ThoriumChunkUploadPacer` (shared) owns the positioned deferred queue and releases it once per world frame under a budget of 8 sections per frame. The velocity is read by `PlayerVelocityPublisher` (the only class that touches the player entity) and published with the camera position. New mixins: `legacy.LegacyChunkUploadPriorityMixin` (1.21.1, 1.21.11) and `modern.ModernChunkUploadPriorityMixin` (26.1, 26.2, 26.3). |
+| **Roadmap Step 8** | ✅ Ultra Low-Latency Reflex — the platform event queue is drained a second time at the tail of the frame, immediately before the game applies the pending cursor movement, so the movement the player made while the frame was working is applied to the frame they are looking at. The drain is the game's own routine, so every event is still delivered exactly once — only earlier — and the tick is never touched, so the movement packets stay the ones vanilla would have sent. New: `ThoriumReflexController` (shared, a pure policy engine that holds no Minecraft type), `ReflexEventPump` (the platform seam), `core/ReflexInputMixin` + `core/MouseHandlerAccessor` (shared), and the five version-specific `dev.hyperionfps.input.ReflexEventPumpImpl` implementations (`GLFW.glfwPollEvents` on 1.21.x, `RenderSystem.pollEvents()` on 26.1/26.2, `RenderSystem.pollEvents(SDLEventHandler)` on 26.3, which needed the new 26.3-only `modern/MinecraftSdlEventHandlerAccessor`). The controller *measures* what it recovered instead of advertising a millisecond figure it never measured. |
+| **Roadmap Step 9** | ✅ No-Lag Weather & Clean Water / Fast Fog — `WeatherFogOptimizer` (shared, a pure policy engine that holds no Minecraft type) owns the three weather modes and both fog clamps. The **splash particles** are dropped in one shared place, `core/WeatherSplashMixin` on `ClientLevel#addParticle(ParticleOptions, double×6)` — the method the weather uses on all five nodes. That placement is deliberate: on every version the weather spawns the splash particles **and** plays the rain sound from the same method, so cancelling the method would silence the storm. The **precipitation layer** is dropped in the existing per-era weather mixins, which now honour the weather mode and not only Extreme FPS mode. The **fog** is rewritten where the game computes it: 1.21.1 reads and writes `RenderSystem`'s shader fog, 1.21.11 hooks the water environment plus the `Mth#clamp` that produces the distance fog band, and 26.x rewrites the `FogData` the renderer uploads. New mixins: `core/WeatherSplashMixin` (shared), `legacy/LegacyWaterFogMixin` + `legacy/LegacyFogRendererMixin` (1.21.11). **Two claims were corrected rather than softened**: the roadmap's "lightweight single-pass rain sheets" is not implementable without visibly thinning the rain curtain (its alpha *rises* with the distance), so MINIMAL does what actually saves work — it drops the splash flood, which is `0.225 × (2r+1)² × rainLevel²` particles *per tick*; and the "reduced GPU fragment fill-rate overhead" of the fog part is not real (the fog shader blends every fragment either way), so the console now calls the fog feature visual and the counters report the splash particles that were really removed. 19 new tests; the suite grew from 297 to **316 tests** across 42 classes. |
+| **Roadmap Step 10** | ✅ Multi-Version Verification, Mixin Audit & Release Prep — `./gradlew test` is green on **all five** nodes (317 tests / 42 classes each, 0 failures, 0 errors, 0 skipped) and `./gradlew buildAll` produced the five `0.1.2` jars in `build/dist/`. `MixinTargetAuditTest` passed on every node (12 `core` + 21–23 `legacy` + 20–21 `modern` mixins per node), and the per-node `fabric.mod.json` resolved every `${...}` placeholder. The stale `0.1.1` jars were removed from `build/dist/`, so the directory now holds exactly the five artifacts of the current version. The documentation sweep that closed the roadmap corrected four real drifts: the README's "sub-millisecond input queueing" claim for the Nuclear Max preset (the input pacer is a telemetry-only counter — the real low-latency feature is the same-frame Reflex), `spec.md`'s headline-feature count and component inventory, `AGENTS.md`'s stale gotchas about the version matrix and the settings-console rows, and the test/mixin/file counts in every document. |
 ## 7. Changelog
 
 | Commit | Date | Change |
 | :--- | :--- | :--- |
+| *(uncommitted)* | 2026-10-22 | **Roadmap Step 10 — the headline roadmap is complete.** All ten steps are done and the whole matrix is verified: `./gradlew test` is green on **all five** version nodes — 317 tests / 42 classes each, 0 failures, 0 errors, 0 skipped — and `./gradlew buildAll` produced the five `0.1.2` jars in `build/dist/` (280 713 B / 279 871 B / 275 984 B / 276 206 B / 276 865 B). The per-node `fabric.mod.json` resolved every `${id}` / `${version}` / `${minecraft}` / `${java_version}` placeholder, and the mixin configuration expanded to 12 `core` + 21–23 `legacy` + 20–21 `modern` mixins per node. **`MixinTargetAuditTest` passed on every node**, and it is not a vacuous pass: it fails the build if the expanded mixin list is empty, if a `${...}` placeholder survived the expansion, if a registered mixin was never compiled, if an injection selector matches no method on that node's Minecraft jar, if an accessor field was renamed, or if a compiled mixin is not registered in the configuration. The five version-specific `ReflexEventPumpImpl` implementations are covered by `ThoriumReflexControllerTest`, so a node that lost its input drain fails the build instead of silently losing the feature. The stale `0.1.1` jars were removed from `build/dist/`, so the directory now holds exactly the five artifacts of the current version. **The documentation sweep closed the roadmap and corrected four real drifts**: the README advertised "sub-millisecond input queueing" for the Nuclear Max preset — a claim the leftover `ThoriumInputPacer` counter never earned (the real low-latency feature is the same-frame Reflex, and the console row for the counter now says *not available*); `spec.md` still said "eight headline features (REQ-HEAD-1 … REQ-HEAD-9)" while ten exist, and its component inventory was missing `MobFarmOptimizer`, `ElytraFlightSmoother`, `PlayerVelocityPublisher` and `ThoriumInputPacer`; `AGENTS.md` still warned that "the docs say 4 versions" and that a new toggle needed a row in all five `ThoriumVideoSettingsScreen` files (both obsolete since the rows moved into the shared `ThoriumSettingRows` catalogue); and the test, mixin and file counts in every document were stale. What remains open is unchanged and is tracked in `PLAN.md`: the seven subsystems that are implemented but still have no call site, the benchmark harness (G-7) and the release tags (G-11). |
+| *(uncommitted)* | 2026-10-22 | **Roadmap Step 9** — the No-Lag Weather and the Clean Water / Fast Fog optimiser are live. A downpour spawns a ground splash particle on every block around the player — `0.225 × (2r+1)² × rainLevel²` of them *per tick*, several thousand per second, each one a real particle with its own quad and lifetime, and none of them distinguishable from its neighbours. The three weather modes now do something about that: `VANILLA` touches nothing, `MINIMAL` keeps the rain sheets exactly as vanilla draws them but drops the splash flood, and `OFF` removes the precipitation layer from the screen while the world's weather, the server's weather and the rain sound stay exactly as they are. The splash is dropped at the **particle call** — `ClientLevel#addParticle(ParticleOptions, double×6)`, the method the weather uses on all five nodes — and not at the weather method, because on every version that same method plays the rain sound and cancelling it would silence the storm. The fog part clamps the underwater fog to a short, crisp distance (`0 … 48` blocks instead of vanilla's `−8 … 96`) and narrows the distance fog band to at most 24 blocks, so the water reads as a clean, even tint and the horizon resolves sharply; the band is never widened, so at the default render distance nothing changes at all. New: `WeatherFogOptimizer` (shared, a pure policy engine that holds no Minecraft type and owns the modes, the clamps and the accounting), `core/WeatherSplashMixin` (the shared splash hook), `legacy/LegacyWaterFogMixin` + `legacy/LegacyFogRendererMixin` (1.21.11), and the per-era fog and weather mixins, which now honour the weather mode and the clean-water switch instead of only Extreme FPS mode. **Two claims were corrected rather than softened**: the roadmap's "lightweight single-pass rain sheets" is not implementable without visibly thinning the rain curtain (the alpha of a rain column *rises* with the distance, so the far columns are the thickest part of it), and the fog's promised "reduced GPU fragment fill-rate overhead" is not real — the fog shader blends every fragment whether the band is 24 blocks wide or 64 — so the console now says the fog feature is visual, and the counters report the splash particles that were really removed. 19 new tests; the suite grew from 297 to **316 tests** across 42 classes. |
+| *(uncommitted)* | 2026-10-22 | **Roadmap Step 8** — the Ultra Low-Latency Reflex is live. Minecraft drains the platform event queue once per frame and applies the collected cursor movement afterwards, so everything the player does *while* the frame is working reaches the camera one frame late. Thorium now drains the queue a **second** time, at the last moment at which the result is still useful: `MouseHandler#handleAccumulatedMovement`, which the game calls immediately before it builds the camera matrix on all five nodes. The movement that arrived during the frame is therefore applied to the frame the player is looking at. Because the queue is *drained* and not copied, every event is still delivered exactly once — only earlier — and the tick is never touched, so the movement packets the client sends are exactly the ones vanilla would have sent. New: `ThoriumReflexController` (shared, a pure policy engine that holds no Minecraft type and owns the decision, the accounting and the platform seam), `ReflexEventPump` (the seam itself), `core/ReflexInputMixin` (the shared hook) and `core/MouseHandlerAccessor` (reads the pending cursor movement). The five version-specific `dev.hyperionfps.input.ReflexEventPumpImpl` implementations drain the queue with the game's own routine: `GLFW.glfwPollEvents()` on 1.21.1 / 1.21.11 (the game's own `RenderSystem#pollEvents` is private there), the public `RenderSystem#pollEvents()` on 26.1 / 26.2, and `RenderSystem#pollEvents(SDLEventHandler)` on 26.3 (SDL3 era — the handler is read through the new 26.3-only `modern/MinecraftSdlEventHandlerAccessor`). The shared controller finds them by name, so the shared source never mentions GLFW or SDL, and a node that lost its implementation is caught by a unit test instead of silently losing the feature. **The latency claim was corrected rather than softened**: the roadmap's "8–14 ms" figure belongs to NVIDIA Reflex's render-ahead pipeline, which Minecraft does not have, so the console badge now says *"Same-Frame Input"* and the controller reports the cursor movement it actually recovered. 18 new tests; the suite grew from 279 to **297 tests** across 41 classes. |
+| *(uncommitted)* | 2026-10-21 | **Roadmap Step 7** — the Elytra Flight Smoother is live, and the 26.x nodes finally have a chunk-pacing hook. While the player is flying faster than 15 m/s, a chunk section that lies behind the flight vector is **postponed** instead of built right away, and the sections inside a 45° forward cone are built first — so the world keeps up with an elytra flight instead of stalling behind it. New: `ElytraFlightSmoother` (shared, a pure policy engine that holds no Minecraft type) and `PlayerVelocityPublisher` (the only class in the codebase that reads the player entity, so the decision table stays unit-testable without a game). `ThoriumChunkUploadPacer` grew a positioned deferred queue that is drained once per world frame, in the order the flight vector demands, under a budget of 8 sections per frame. Three guards keep the deferral from ever becoming a visible hole: a section closer than 16 blocks is never deferred, a section that has waited for more than half a second is released regardless of its priority, and a section that can no longer be scheduled is dropped instead of crashing the frame. New mixins: `legacy.LegacyChunkUploadPriorityMixin` (1.21.1, 1.21.11) and `modern.ModernChunkUploadPriorityMixin` (26.1, 26.2, 26.3) — each one intercepts the point at which vanilla *schedules* a section build, which is the last point at which the build can still be postponed. The console row for the chunk upload pacer is now a working switch on all five nodes ("2.5ms Cap" on 1.21.x, "Flight Order" on 26.x — the 26.x pipeline copies every mesh into shared GPU buffers in one go, so there the pacer budgets the section *builds* instead of the upload). 27 new tests; the suite grew from 252 to **279 tests** across 40 classes. |
+| *(uncommitted)* | 2026-10-21 | **Roadmap Step 6** — the explosion & firework shield is live: a TNT chain, a wither spawn or a firework show can no longer drown the client in particles. Two continuously refilled token buckets do the work — a global one that admits 250 of the tracked particles per second and a per-one-block-cell one that admits 48 per second, which is what removes the quads that are drawn on top of each other. The safety rule is the interesting part: the first particle of every category inside a burst is *protected* and bypasses the rate limit, the per-cell limit **and** the global creation budget, so the explosion flash and the primary puff always survive — a client that is drowning in particles has an exhausted budget, and that budget would otherwise swallow the flash. New: `ExplosionShield` (shared, pure policy engine with no Minecraft type in it) and `ExplosionParticleFilter` (shared, the Minecraft-facing adapter and the single entry point the particle creation hook uses). `ThoriumParticleBudget` gained a priority admission path; `AsyncOcclusionCuller` gained `isParticleOutOfView` so a protected particle can skip the budget without skipping the distance and occlusion test. 21 new tests; the suite grew from 231 to **252 tests** across 39 classes. |
+| *(uncommitted)* | 2026-10-21 | **Roadmap Step 5** — the mob farm optimizer is live: a cell of 5×5 blocks that holds more than 15 living entities of the *same* species is a mob farm, and the animation of a mob in such a cell is recomputed on one frame out of three. The two skipped frames perform no bone and no limb-swing work at all, and the per-entity hash spreads the skipped frames so a pen never freezes in unison. A mob within 4 blocks of the camera keeps its full animation, and the local player, a named mob, a leashed mob and a passenger are exempt — an exempt mob is not counted and it protects its whole cell. The cell is also dampened acoustically: after 6 sound events in 50 ms the surplus is played at half the volume, and beyond twice that it is dropped. New: `MobFarmOptimizer` (shared), `core.AbstractSoundInstanceAccessor`, `legacy.LegacyMobFarmEntityMixin` + `modern.ModernMobFarmEntityMixin` (the modern render pipeline hands the animation hook an extracted state, not the entity, so the cluster map is filled where the entity is still visible). The mixin target audit now verifies field selectors as well as method selectors. |
+| *(uncommitted)* | 2026-10-21 | **Roadmap Step 4** — the storage-room culler is live: chests, trapped chests, ender chests, shulker boxes and item frames get their own visibility rules. A container sealed in opaque blocks on all six sides is invisible from every angle and is skipped; a container past 32 blocks is skipped when it is also outside the player's direct focal cone; an item frame past 24 blocks is skipped outright. The container the player currently has open is never skipped, and neither is the other half of a double chest. The switch is live in the settings console instead of reporting `NOT AVAILABLE`. |
+| *(uncommitted)* | 2026-10-21 | **Roadmap Step 3** — the Nuclear Stutter Hunter breaks a frame down into five phases, correlates JVM GC pauses with the stutter window and prints a toast that names the dominant phase (`Spike: 58ms [GC: 34ms \| Mobs: 18ms \| Chunk: 6ms]`). The banner is rendered by all five HUD renderers. |
 | *(uncommitted)* | 2026-10-21 | **Roadmap Step 2** — the AFK power saver throttles the client to ~10 FPS and parks the render thread while the player is away; mouse movement, clicks and key presses wake it immediately. The frametime measurement is suspended while the throttle runs so an intentional park is not counted as a stutter. |
 | *(uncommitted)* | 2026-10-21 | **Roadmap Step 1** — the ten headline feature switches are persisted and wired three ways, the presets and the settings rows moved into shared code, and the console rows for the not-yet-implemented features report themselves as `NOT AVAILABLE` instead of pretending to work. |
 | *(uncommitted)* | 2026-10-21 | Settings console: the row list scrolls inside the band above the footer bar so no row is drawn over the footer on a short window (all five nodes); the Nuclear preset keeps fast math enabled; the one-time invite is recorded as shown when the card opens. |
@@ -663,6 +714,13 @@ Organized in [`TODO.md`](./TODO.md) to deliver maximum player-facing value in co
 
 | Date | Action |
 | :--- | :--- |
+| 2026-10-22 | **Roadmap Step 10 done — the headline roadmap is complete and the whole matrix is verified.** `./gradlew test` green on all five nodes (317 tests / 42 classes each, 0 failures, 0 errors, 0 skipped); `./gradlew buildAll` produced the five `0.1.2` jars in `build/dist/`; `MixinTargetAuditTest` green on all five nodes (12 `core` + 21–23 `legacy` + 20–21 `modern` mixins per node); the per-node `fabric.mod.json` resolved every placeholder. The stale `0.1.1` jars were deleted from `build/dist/` so the directory holds exactly the five artifacts of the current version. The documentation sweep corrected four real drifts: the README's "sub-millisecond input queueing" claim for the Nuclear Max preset (the input pacer is a telemetry-only counter — the real low-latency feature is the same-frame Reflex), `spec.md`'s headline-feature count ("eight" → ten) and its component inventory, `AGENTS.md`'s obsolete gotchas (the "docs say 4 versions" warning and the "add a row to all five screens" rule, which §6a replaced with the shared `ThoriumSettingRows` catalogue), and the stale test / mixin / file counts everywhere. |
+| 2026-10-22 | **Roadmap Step 8 done** — new shared `dev.hyperionfps.input.ThoriumReflexController` (a **pure policy engine**: it holds no Minecraft type at all, so the whole decision table is unit-testable without a running game) and `dev.hyperionfps.input.ReflexEventPump` (the platform seam). The feature drains the platform event queue a **second** time per frame, at `MouseHandler#handleAccumulatedMovement` — the point at which the game applies the pending cursor movement and, on all five nodes, immediately before the camera matrix is built. The movement that arrived while the frame was working is therefore applied to the frame the player is looking at instead of the next one. The drain is the **game's own routine**, so the queue is drained rather than copied and every event is still delivered exactly once — only earlier. The tick is never touched, so the movement packets the client sends stay the ones vanilla would have sent, and the camera is never touched either: the game still applies the movement with its own smoothing and sensitivity. The shared hook is `core/ReflexInputMixin`; the pending movement is read through the new `core/MouseHandlerAccessor` (`accumulatedDX` / `accumulatedDY` — same names on every node, so the build-time audit proves on each of them that the fields are really there). The five version-specific `dev.hyperionfps.input.ReflexEventPumpImpl` implementations drain the queue the way the game does: `GLFW.glfwPollEvents()` on 1.21.1 / 1.21.11 (the game's own `RenderSystem#pollEvents()` is **private** there), the public `RenderSystem#pollEvents()` on 26.1 / 26.2, and `RenderSystem#pollEvents(SDLEventHandler)` on 26.3 — the SDL3 era, where the handler lives in a private field of the client and is read through the new 26.3-only `modern/MinecraftSdlEventHandlerAccessor`. The shared controller finds the implementation **by name**, so the shared source never mentions GLFW or SDL; a node that lost its implementation fails a unit test instead of silently losing the feature. The controller **measures** what the drain recovered (`getRecoveredPixels()`, `getFreshInputFrames()`) rather than advertising a millisecond figure it never measured — the roadmap's "8–14 ms" belongs to NVIDIA Reflex's render-ahead pipeline, which Minecraft does not have, so the console badge now says *"Same-Frame Input"*. The leftover `ThoriumInputPacer` stub is now honestly documented as a counter with no call site (the startup report still lists it as `UNWIRED`); deleting it and its `input.pacer.enabled` key stays in the backlog as A-12 / G-8. 18 new tests (`ThoriumReflexControllerTest`); the suite grew from 279 to **297 tests** across 41 classes; `test` green on all five nodes and `buildAll` produced five jars. |
+| 2026-10-21 | **Roadmap Step 7 done** — new shared `dev.hyperionfps.chunk.ElytraFlightSmoother` (a **pure policy engine**: it holds no Minecraft type at all, so the whole decision table is unit-testable without a running game) and `dev.hyperionfps.chunk.PlayerVelocityPublisher` (the only class that touches the player entity — it reads `Minecraft#player.getDeltaMovement()` and publishes the velocity, so the policy stays pure). `ThoriumChunkUploadPacer` grew a **positioned deferred queue**: a section whose build was postponed is released in the order the flight vector demands — the sections inside the 45° forward cone first, the neutral ones next, the ones behind the player last — under a budget of 8 sections per frame, and the queue is drained once per world frame from `ThoriumFrameContext.beginWorldFrame`, the only place that publishes the frame. The classification uses the **velocity** vector, not the view direction, so a section behind the player can still be on the screen when the player looks back; three guards keep that from becoming a visible hole: a section closer than 16 blocks is never deferred, a section that has waited for more than 500 ms is released regardless of its priority, and a section that can no longer be scheduled is dropped instead of crashing the frame. The hooks are one mixin per node: `legacy.LegacyChunkUploadPriorityMixin` (1.21.1 → `rebuildSectionAsync(SectionRenderDispatcher, RenderRegionCache)`, 1.21.11 → `rebuildSectionAsync(RenderRegionCache)`) and `modern.ModernChunkUploadPriorityMixin` (26.1 → `rebuildSectionAsync(RenderRegionCache)`, 26.2/26.3 → `compileAsync(RenderSectionRegion)`). Each one intercepts the point at which vanilla *schedules* a section build — a pure scheduling call, so calling it a few frames later is safe — and postpones it when the section lies behind the flight vector. A per-section `@Unique` flag keeps one section from being queued twice, and a replay guard in the pacer recognises the release so it is not deferred again. **Honest limitation:** the 26.x pipeline copies every chunk mesh into shared GPU buffers in one go (`SectionRenderDispatcher#uploadTerrainBuffersToGpu`), so the *upload* itself still cannot be split into a per-frame budget the way the 1.21.x `Queue<Runnable>` can; on 26.x the pacer budgets the section *builds* instead, which is what fills that upload queue. The console row says exactly that. 27 new tests (`ElytraFlightSmootherTest` 17, `ThoriumChunkUploadPacerTest` 12); the suite grew from 252 to **279 tests** across 40 classes; `test` green on all five nodes and `buildAll` produced five jars. |
+| 2026-10-21 | **Roadmap Step 6 done** — new shared `dev.hyperionfps.particle.ExplosionShield` (a **pure policy engine**: it holds no Minecraft type at all, so the whole decision table is unit-testable without a running game) and `dev.hyperionfps.particle.ExplosionParticleFilter` (the Minecraft adapter: it maps `ParticleTypes.EXPLOSION`, `EXPLOSION_EMITTER`, `FIREWORK`, `CAMPFIRE_COSY_SMOKE`/`CAMPFIRE_SIGNAL_SMOKE` and `LARGE_SMOKE` onto the five shield categories and applies the decision). The particle creation hook (`core.ParticleEngineMixin`, `ParticleEngine#createParticle` — the same injection that was already live on all five nodes) now asks the filter, which applies the shield and then falls back to `AsyncOcclusionCuller.shouldCullParticle`, so the feature can only ever *add* a cull. Two limits: a global token bucket (250 particles/sec, refilled continuously so it is a rate and not a cliff) and a per-cell token bucket (48 particles/sec per 1×1×1 block cell, so a campfire that puffs smoke forever is untouched while a wither that dumps 200 smoke particles into one block in one tick is cut down). The **first particle of every category inside a burst is protected** and bypasses the rate limit, the per-cell limit *and* the global creation budget (`ThoriumParticleBudget.admitPriority()`) — the budget bypass is what makes the guarantee real, because a client that is drowning in particles has an exhausted budget and would otherwise swallow the explosion flash. `AsyncOcclusionCuller.isParticleOutOfView` was split out of `shouldCullParticle` so a protected particle can skip the budget without skipping the distance and occlusion test. A cell that has been quiet for 250 ms starts a new burst, which is what lets the next explosion in the same block get its own flash. 21 new tests (`ExplosionShieldTest`); the suite grew from 231 to **252 tests** across 39 classes; `test` green on all five nodes and `buildAll` produced five jars. |
+| 2026-10-21 | **Roadmap Step 5 done** — new shared `dev.hyperionfps.anim.MobFarmOptimizer`. It owns the whole animation decision: the five `Legacy/ModernEntityLodMixin` hooks now ask `MobFarmOptimizer.shouldSkipAnimation(...)`, which applies the cluster rule and then falls back to the distance-based animation LOD, so switching the feature off restores the old behaviour exactly (the same "one owner, fall back" pattern as `StorageCullingEngine`). The cluster map is a pair of open-addressed primitive tables — one keyed by species + 5×5 cell, one by cell alone — that are cleared and refilled every frame, so the whole path is allocation-free. A cell is a mob farm when it holds more than 15 living entities of the **same** species; the animation of such a mob is recomputed on one frame out of three, and the per-entity hash spreads the skipped frames so a pen does not freeze in unison. Mobs within 4 blocks of the camera are never throttled. Exemptions (local player, named mob, leashed mob, passenger) live in one pure rule; an exempt mob is not counted and protects its whole cell. The modern render pipeline (1.21.11 and 26.x) hands the animation hook an extracted `EntityRenderState` instead of the entity, so two new hooks on `EntityRenderDispatcher#extractEntity` (`legacy.LegacyMobFarmEntityMixin`, `modern.ModernMobFarmEntityMixin`) fill the cluster map — that is the last point at which the leash and the passenger flags still exist. 1.21.1 still works on the entity itself. The sound governor gained the acoustic dampening: a cell that the optimizer reports as a mob farm gets its own policy (6 events per 50 ms at full volume, the next 6 at half the volume through the new `core.AbstractSoundInstanceAccessor`, the surplus dropped); the general 4-per-cell rate limit is unchanged elsewhere. The mixin target audit was extended to verify **field** selectors, so a renamed field can no longer break an accessor silently. 23 new tests (`MobFarmOptimizerTest` 18, `ThoriumSoundGovernorTest` 5); the suite grew from 208 to **231 tests** across 38 classes. `buildAll` green on all five nodes. |
+| 2026-10-21 | **Roadmap Step 4 done** — new shared `dev.hyperionfps.culling.StorageCullingEngine`. It is the single entry point for the block-entity and entity culling mixins on all five nodes (10 call sites rewritten: `Legacy{BlockEntity,Entity}CullingMixin` on 1.21.1 / 1.21.11 and `Modern{BlockEntity,Entity}CullingMixin` on 26.1 / 26.2 / 26.3) and it falls back to `AsyncOcclusionCuller` for everything it does not handle itself, so the feature only ever *adds* a cull and switching it off restores the old behaviour exactly. Rules: a container whose six face neighbours are all opaque full blocks that carry no block entity is invisible from every angle and is skipped; a container past 32 blocks (16 in Extreme mode) is skipped only when it is also more than 45° off the view axis, so a chest the player is looking at is never popped out; an item frame past 24 blocks (12 in Extreme) is skipped outright, and a frame that is more than 45° off-axis past 16 blocks is skipped too. The open container is identified exactly through the player's container menu and is never skipped. The three predicates that need a game state were extracted as pure seams (`decideContainerCull`, `decideItemFrameCull`, `isBlockingNeighbour`) so the whole decision table is unit-testable without a Minecraft bootstrap. 30 new tests; the suite grew from 178 to **208 tests** across 36 classes. |
+| 2026-10-21 | **Roadmap Step 3 done** — `ThoriumPhaseTimer` (5-phase frame breakdown), `ThoriumGcWatcher` (GC pause correlation), `ThoriumStutterHunter` (spike attribution) and `ThoriumToastQueue` (the HUD toast) are live; the banner is drawn by all five HUD renderers. 11 new tests. |
 | 2026-10-21 | **Roadmap Step 2 done** — `ThoriumAfkManager` (shared) owns the idle clock, the focus state and the park. Activity is reported by three new mixins: `core/AfkMouseActivityMixin` and `core/AfkKeyboardActivityMixin` (one core mixin each, using a descriptor-less selector so the changed 26.3 `onMove` signature is covered) plus `legacy/LegacyAfkClickMixin` (1.21.1 `onPress`, 1.21.11 `onButton`) and `modern/ModernAfkClickMixin` (`onButton`). The build-time mixin audit proves every one of those targets exists on its node. The 90 ms park is spent in 16 ms slices so a click is noticed within one slice. The frametime tracker is suspended during the throttle (`ThoriumFrametimeTracker.resetClock()`). 12 new tests; the suite grew from 155 to **167 tests** across 34 classes. |
 | 2026-10-21 | **Roadmap Step 1 done** — `ThoriumFeatureToggles` (the shared registry of the eight headline switches, the AFK timeout and the weather mode), `ThoriumPresets` (the three hardware profiles, moved out of the five per-version screens) and `ThoriumSettingRows` (the shared row catalogue) are new shared classes. The five `ThoriumVideoSettingsScreen` files lost ~360 lines each and now only contain the era-specific widget and drawing code. The ten headline switches are persisted, wired three ways, and each has a console row that reports `NOT AVAILABLE` until its implementation lands. `ThoriumSubsystemReport` lists them as `UNWIRED` until then. The *Purge RAM Now* button now reports the measured amount instead of a fabricated 12 MB minimum. Test suite grew from 130 to **155 tests** across 33 classes; `buildAll` green on all five nodes. |
 | 2026-10-20 | `AGENTS.md`, `spec.md`, `state.md` created from a full codebase survey. Build (`:26.3:compileJava`), tests (`:26.3:test`, 79/79 green) and `buildAll` (5 jars) all verified. |

@@ -70,15 +70,14 @@ public final class ThoriumGcWatcher {
     /**
      * Reads the garbage-collection counters and records a new pause.
      *
-     * <p>Called once per client frame. The pause is stamped with the current time,
+     * <p>Called once per client frame. The pause is stamped with the frame-end time,
      * so it belongs to the frame that has just ended.</p>
      */
-    public static void poll() {
+    public static void poll(long frameEndNanos) {
         GarbageCollectorMXBean[] snapshot = collectors;
         if (snapshot.length == 0) {
             return;
         }
-        long now = System.nanoTime();
         for (int i = 0; i < snapshot.length; i++) {
             GarbageCollectorMXBean bean = snapshot[i];
             if (bean == null) {
@@ -97,7 +96,7 @@ public final class ThoriumGcWatcher {
                 LAST_COLLECTION_TIME[i] = time;
                 LAST_COLLECTION_COUNT[i] = count;
                 lastPauseNanos = deltaMillis * 1_000_000L;
-                lastPauseAtNanos = now;
+                lastPauseAtNanos = frameEndNanos;
                 lastCollector = names[i];
                 totalPauses++;
             }

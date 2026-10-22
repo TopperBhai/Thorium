@@ -44,7 +44,7 @@ public class ThoriumVideoSettingsScreen extends Screen {
     private static String activePreset = ThoriumConfig.get().getString(ThoriumConfig.KEY_PRESET, "BALANCED");
 
     /** Whether this Minecraft version has a Thorium hook in the chunk upload path. */
-    private static final boolean CHUNK_UPLOAD_PACER_SUPPORTED = true;
+    private static final boolean GPU_UPLOAD_BUDGET_SUPPORTED = true;
 
     private final Screen lastScreen;
     private final List<AbstractWidget> tabWidgets = new ArrayList<>();
@@ -162,7 +162,7 @@ public class ThoriumVideoSettingsScreen extends Screen {
         // the rendering differ between the legacy and the modern era.
         List<ThoriumSettingRows.Spec> rows = switch (currentTab) {
             case GENERAL -> ThoriumSettingRows.generalRows(() -> ThoriumDiscordScreen.openInvite());
-            case PERFORMANCE -> ThoriumSettingRows.performanceRows(CHUNK_UPLOAD_PACER_SUPPORTED);
+            case PERFORMANCE -> ThoriumSettingRows.performanceRows(GPU_UPLOAD_BUDGET_SUPPORTED);
             case ADVANCED -> ThoriumSettingRows.advancedRows();
         };
 

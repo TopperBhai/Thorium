@@ -4,7 +4,10 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import dev.hyperionfps.adaptive.AdaptiveDistanceController;
 import dev.hyperionfps.adaptive.RenderDistanceGovernor;
+import dev.hyperionfps.anim.MobFarmOptimizer;
 import dev.hyperionfps.anim.ThoriumEntityLodThrottler;
+import dev.hyperionfps.chunk.ElytraFlightSmoother;
+import dev.hyperionfps.chunk.ThoriumChunkUploadPacer;
 import dev.hyperionfps.culling.AsyncOcclusionCuller;
 import dev.hyperionfps.culling.FrustumCache;
 import dev.hyperionfps.culling.OcclusionGrid;
@@ -88,11 +91,12 @@ public final class ThoriumFrameContext {
         // power saving, not a performance problem, so the measurement is suspended
         // while it runs and the statistics keep describing real gameplay.
         if (ThoriumAfkManager.isEcoActive()) {
-            ThoriumFrametimeTracker.resetClock();
+            // The eco frame intentionally parks the client; do not let that sleep
+            // leak into the next measured frame.
         } else {
             // The garbage-collection counters are read first, so a collection that
             // happened during this frame is attributed to this frame.
-            dev.hyperionfps.telemetry.ThoriumGcWatcher.poll();
+            dev.hyperionfps.telemetry.ThoriumGcWatcher.poll(now);
             ThoriumFrametimeTracker.recordFrame();
             // The phase breakdown of the frame that just ended is still in the timer:
             // the Stutter Hunter looks at it before the timer is reset for the new
@@ -110,10 +114,14 @@ public final class ThoriumFrameContext {
 
         if (worldLoaded) {
             ThoriumFramePacer.paceFrame();
-        } else {
-            // The menus are never frame-paced, but they are still parked while the
-            // player is away - that is where a left-open game burns a whole core.
+        }
+
+        if (ThoriumAfkManager.isEcoActive()) {
+            // The eco frame intentionally parks the client; do not let that sleep
+            // leak into the next measured frame, whether the client is in a world or
+            // in the menus.
             ThoriumAfkManager.parkEcoFrame();
+            ThoriumFrametimeTracker.resetClock();
         }
     }
 
@@ -149,6 +157,9 @@ public final class ThoriumFrameContext {
 
         AsyncOcclusionCuller.publishCamera(camX, camY, camZ, level);
         OcclusionGrid.onCameraUpdate(camX, camY, camZ);
+        // The Elytra Flight Smoother classifies every pending section against the
+        // camera, so the camera has to be published before anything is released.
+        ElytraFlightSmoother.publishCamera(camX, camY, camZ);
         if (frustum != null) {
             FrustumCache.update(frustum);
         }
@@ -167,6 +178,14 @@ public final class ThoriumFrameContext {
         }
 
         ThoriumEntityLodThrottler.onFrame();
+        MobFarmOptimizer.beginFrame();
+
+        // The deferred section builds are released once per world frame, in the order
+        // the flight vector demands. The release happens here - after the camera and
+        // the velocity are known - and never anywhere else, so the order cannot drift.
+        if (level != null) {
+            ThoriumChunkUploadPacer.releaseDeferredSections();
+        }
     }
 
     /** Number of client frames observed so far. */
